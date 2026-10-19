@@ -1,7 +1,16 @@
+const COURTYARD_WORLD_WIDTH = 2560;
+const COURTYARD_WORLD_HEIGHT = 1440;
+const COURTYARD_ORIGIN_X = 800;
+const COURTYARD_ORIGIN_Y = 480;
+const ACADEMY_MAP_ART_WIDTH = 800;
+const ACADEMY_MAP_ART_HEIGHT = 480;
+
 function createAcademyMap(scene) {
   const ground = scene.add.graphics();
   const architecture = scene.add.graphics();
   const gardenCanopy = scene.add.graphics();
+  const worldGround = scene.add.graphics();
+  const worldLandscaping = scene.add.graphics();
 
   const colors = {
     grass: 0x769b67,
@@ -152,9 +161,125 @@ function createAcademyMap(scene) {
   architecture.setDepth(1);
   gardenCanopy.setDepth(3);
 
-  fillRect(ground, colors.grass, 0, 0, 800, 480);
-  for (let y = 12; y < 480; y += 24) {
-    for (let x = (Math.floor(y / 24) % 2) * 17 + 8; x < 800; x += 34) {
+  worldGround.setDepth(-2);
+  worldGround.fillStyle(colors.grass, 1);
+  worldGround.fillRect(0, 0, COURTYARD_WORLD_WIDTH, COURTYARD_WORLD_HEIGHT);
+  for (let y = 24; y < COURTYARD_WORLD_HEIGHT; y += 48) {
+    for (let x = (Math.floor(y / 48) % 2) * 23 + 16; x < COURTYARD_WORLD_WIDTH; x += 46) {
+      worldGround.fillStyle((x + y) % 4 === 0 ? colors.grassLight : colors.grassDark, 0.6);
+      worldGround.fillRect(x, y, 4, 3);
+      worldGround.fillRect(x + 7, y + 6, 2, 2);
+    }
+  }
+
+  worldLandscaping.setDepth(-1);
+  worldLandscaping.fillStyle(colors.pathDark, 1);
+  worldLandscaping.fillRect(0, COURTYARD_ORIGIN_Y + 322, COURTYARD_ORIGIN_X + 92, 64);
+  worldLandscaping.fillRect(
+    COURTYARD_ORIGIN_X + 708,
+    COURTYARD_ORIGIN_Y + 322,
+    COURTYARD_WORLD_WIDTH - COURTYARD_ORIGIN_X - 708,
+    64
+  );
+  worldLandscaping.fillRect(
+    COURTYARD_ORIGIN_X + 350,
+    COURTYARD_ORIGIN_Y + ACADEMY_MAP_ART_HEIGHT,
+    100,
+    COURTYARD_WORLD_HEIGHT - COURTYARD_ORIGIN_Y - ACADEMY_MAP_ART_HEIGHT
+  );
+
+  for (const [x, y, width, height] of [
+    [120, 250, 680, 44],
+    [1600, 250, 660, 44],
+    [220, 1040, 620, 40],
+    [1560, 1040, 620, 40],
+    [400, 294, 44, 508],
+    [1956, 294, 44, 508],
+    [550, 950, 42, 354],
+    [1808, 950, 42, 354]
+  ]) {
+    worldLandscaping.fillStyle(colors.pathDark, 1);
+    worldLandscaping.fillRect(x, y, width, height);
+  }
+
+  worldLandscaping.fillStyle(colors.path, 1);
+  worldLandscaping.fillRect(0, COURTYARD_ORIGIN_Y + 322, COURTYARD_ORIGIN_X + 92, 60);
+  worldLandscaping.fillRect(
+    COURTYARD_ORIGIN_X + 708,
+    COURTYARD_ORIGIN_Y + 322,
+    COURTYARD_WORLD_WIDTH - COURTYARD_ORIGIN_X - 708,
+    60
+  );
+  worldLandscaping.fillRect(
+    COURTYARD_ORIGIN_X + 352,
+    COURTYARD_ORIGIN_Y + ACADEMY_MAP_ART_HEIGHT,
+    96,
+    COURTYARD_WORLD_HEIGHT - COURTYARD_ORIGIN_Y - ACADEMY_MAP_ART_HEIGHT
+  );
+  for (let pathX = 12; pathX < COURTYARD_WORLD_WIDTH; pathX += 34) {
+    worldLandscaping.fillStyle(0xd2c6b0, 0.6);
+    worldLandscaping.fillRect(pathX, COURTYARD_ORIGIN_Y + 331, 21, 3);
+  }
+  for (let pathY = COURTYARD_ORIGIN_Y + 488; pathY < COURTYARD_WORLD_HEIGHT; pathY += 28) {
+    worldLandscaping.fillStyle(0xd2c6b0, 0.6);
+    worldLandscaping.fillRect(COURTYARD_ORIGIN_X + 357, pathY, 3, 17);
+    worldLandscaping.fillRect(COURTYARD_ORIGIN_X + 387, pathY + 7, 3, 17);
+    worldLandscaping.fillRect(COURTYARD_ORIGIN_X + 417, pathY, 3, 17);
+  }
+
+  for (const [x, y, width, height] of [
+    [100, 330, 270, 190],
+    [185, 875, 270, 125],
+    [620, 1110, 290, 205],
+    [1670, 325, 260, 170],
+    [2020, 885, 330, 130],
+    [2050, 1110, 220, 205]
+  ]) {
+    worldLandscaping.fillStyle(0x537b52, 1);
+    worldLandscaping.fillRoundedRect(x, y, width, height, 26);
+    worldLandscaping.fillStyle(0x668b5c, 1);
+    worldLandscaping.fillRoundedRect(x + 8, y + 8, width - 16, height - 16, 20);
+    for (let flowerX = x + 22; flowerX < x + width - 12; flowerX += 32) {
+      for (let flowerY = y + 22; flowerY < y + height - 12; flowerY += 30) {
+        worldLandscaping.fillStyle((flowerX + flowerY) % 2 ? colors.rose : 0xf2d78b, 1);
+        worldLandscaping.fillCircle(flowerX, flowerY, 4);
+        worldLandscaping.fillStyle(colors.stoneLight, 1);
+        worldLandscaping.fillRect(flowerX + 4, flowerY - 2, 3, 3);
+      }
+    }
+  }
+
+  for (const [x, y] of [
+    [170, 610], [690, 585], [1720, 570], [2220, 655],
+    [275, 1120], [735, 1275], [1700, 1175], [2220, 1080]
+  ]) {
+    worldLandscaping.fillStyle(0x315b43, 1);
+    worldLandscaping.fillCircle(x, y, 23);
+    worldLandscaping.fillStyle(0x79a766, 1);
+    worldLandscaping.fillCircle(x - 8, y - 7, 13);
+    worldLandscaping.fillStyle(colors.roseLight, 1);
+    worldLandscaping.fillCircle(x - 6, y - 9, 3);
+    worldLandscaping.fillCircle(x + 9, y - 3, 3);
+  }
+
+  ground.setPosition(COURTYARD_ORIGIN_X, COURTYARD_ORIGIN_Y);
+  architecture.setPosition(COURTYARD_ORIGIN_X, COURTYARD_ORIGIN_Y);
+  gardenCanopy.setPosition(COURTYARD_ORIGIN_X, COURTYARD_ORIGIN_Y);
+
+  fillRect(
+    ground,
+    colors.grass,
+    0,
+    0,
+    ACADEMY_MAP_ART_WIDTH,
+    ACADEMY_MAP_ART_HEIGHT
+  );
+  for (let y = 12; y < ACADEMY_MAP_ART_HEIGHT; y += 24) {
+    for (
+      let x = (Math.floor(y / 24) % 2) * 17 + 8;
+      x < ACADEMY_MAP_ART_WIDTH;
+      x += 34
+    ) {
       fillRect(ground, (x + y) % 3 === 0 ? colors.grassLight : colors.grassDark, x, y, 3, 2);
       fillRect(ground, colors.grassLight, x + 5, y + 4, 2, 2);
     }
@@ -342,13 +467,30 @@ function createAcademyMap(scene) {
   drawHedge(47, 391, 176, 24, true);
   drawHedge(700, 391, 62, 24, true);
 
-  scene.castleEntrance = { x: 400, y: 180, radius: 68 };
-  scene.physics.world.setBounds(0, 0, 800, 480);
+  scene.castleEntrance = {
+    x: COURTYARD_ORIGIN_X + 400,
+    y: COURTYARD_ORIGIN_Y + 180,
+    radius: 68
+  };
+  scene.physics.world.setBounds(0, 0, COURTYARD_WORLD_WIDTH, COURTYARD_WORLD_HEIGHT);
   scene.solidObstacles = scene.physics.add.staticGroup();
 
   function addSolidRectangle(x, y, width, height) {
-    const obstacle = scene.add.rectangle(x, y, width, height);
+    const obstacle = scene.add.rectangle(
+      COURTYARD_ORIGIN_X + x,
+      COURTYARD_ORIGIN_Y + y,
+      width,
+      height
+    );
     scene.physics.add.existing(obstacle, true);
+    obstacle.setVisible(false);
+    scene.solidObstacles.add(obstacle);
+  }
+
+  function addSolidCircle(x, y, radius) {
+    const obstacle = scene.add.circle(x, y, radius);
+    scene.physics.add.existing(obstacle, true);
+    obstacle.body.setCircle(radius);
     obstacle.setVisible(false);
     scene.solidObstacles.add(obstacle);
   }
@@ -367,8 +509,28 @@ function createAcademyMap(scene) {
   addSolidRectangle(764.5, 262, 15, 64);
   addSolidRectangle(135, 403, 176, 18);
   addSolidRectangle(731, 403, 62, 18);
+  for (const [x, y, width, height] of [
+    [100, 330, 270, 190],
+    [185, 875, 270, 125],
+    [620, 1110, 290, 205],
+    [1670, 325, 260, 170],
+    [2020, 885, 330, 130],
+    [2050, 1110, 220, 205]
+  ]) {
+    addSolidRectangle(x + 8, y + 8, width - 16, height - 16);
+  }
+  for (const [x, y] of [
+    [170, 610], [690, 585], [1720, 570], [2220, 655],
+    [275, 1120], [735, 1275], [1700, 1175], [2220, 1080]
+  ]) {
+    addSolidCircle(x, y, 14);
+  }
 
-  const fountain = scene.add.circle(400, 347, 35);
+  const fountain = scene.add.circle(
+    COURTYARD_ORIGIN_X + 400,
+    COURTYARD_ORIGIN_Y + 347,
+    35
+  );
   scene.physics.add.existing(fountain, true);
   fountain.body.setCircle(35);
   fountain.setVisible(false);

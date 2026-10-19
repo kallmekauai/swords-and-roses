@@ -1,5 +1,21 @@
-const WIDTH = 800;
-const HEIGHT = 480;
+const WIDTH = 1280;
+const HEIGHT = 720;
+const ACADEMY_ROOM_SCALE = 1.5;
+const ACADEMY_ROOM_OFFSET_X = 40;
+
+function courtyardPoint(x, y) {
+  return {
+    x: COURTYARD_ORIGIN_X + x,
+    y: COURTYARD_ORIGIN_Y + y
+  };
+}
+
+function academyRoomPoint(x, y) {
+  return {
+    x: ACADEMY_ROOM_OFFSET_X + x * ACADEMY_ROOM_SCALE,
+    y: y * ACADEMY_ROOM_SCALE
+  };
+}
 
 const kauaiDialogue = [
   {
@@ -64,11 +80,22 @@ function createRolandoTexture(scene) {
   return textureKey;
 }
 
-function createNpc(scene, { name, x, y, spriteKey, dialogue, interactionDistance = 72 }) {
+function createNpc(
+  scene,
+  { name, x, y, spriteKey, dialogue, interactionDistance = 72 }
+) {
+  const displayScale = scene.actorDisplayScale || 1;
   const sprite = scene.add.image(x, y, spriteKey)
-    .setDisplaySize(32, 48)
+    .setDisplaySize(32 * displayScale, 48 * displayScale)
     .setDepth(3);
-  const npc = { name, x, y, sprite, dialogue, interactionDistance };
+  const npc = {
+    name,
+    x,
+    y,
+    sprite,
+    dialogue,
+    interactionDistance: interactionDistance * displayScale
+  };
   scene.npcs.push(npc);
   return npc;
 }
@@ -105,9 +132,9 @@ function showDialogueLine(scene) {
   document.getElementById('dialogue-box').classList.remove('hidden');
 }
 
-function createKnight(scene, x, y) {
+function createKnight(scene, x, y, displayScale = 1) {
   const knight = scene.physics.add.sprite(x, y, 'omar-down-0');
-  knight.setDisplaySize(32, 48);
+  knight.setDisplaySize(32 * displayScale, 48 * displayScale);
   knight.setDepth(2);
   knight.body.setSize(20, 12);
   knight.body.setOffset(6, 34);
@@ -123,7 +150,7 @@ function createKnight(scene, x, y) {
 }
 
 function updateKnightMovement(scene) {
-  const speed = 190;
+  const speed = 190 * (scene.movementScale || 1);
   const body = scene.knight.body;
   body.setVelocity(0);
   if (scene.cursors.left.isDown || scene.keys.A.isDown) body.setVelocityX(-speed);
@@ -149,7 +176,7 @@ function createInteractionPrompt(scene) {
     color: '#fff0d7',
     backgroundColor: '#282039',
     padding: { x: 10, y: 6 }
-  }).setOrigin(0.5).setDepth(20).setVisible(false);
+  }).setOrigin(0.5).setDepth(20).setScrollFactor(0).setVisible(false);
 }
 
 function transitionTo(scene, target, data) {
@@ -181,9 +208,10 @@ class AcademyScene extends Phaser.Scene {
 
   create(data = {}) {
     createOmarAnimations(this);
-    this.cameras.main.setBackgroundColor('#252341');
+    this.cameras.main.setBackgroundColor('#769b67');
     createAcademyMap(this);
-    this.princess = this.add.sprite(550, 385, 'kauai');
+    const princessPosition = courtyardPoint(550, 385);
+    this.princess = this.add.sprite(princessPosition.x, princessPosition.y, 'kauai');
 
     this.princess.setDisplaySize(48, 64);
     this.princess.setDepth(2);
@@ -191,19 +219,31 @@ class AcademyScene extends Phaser.Scene {
     this.dialogueIndex = 0;
     this.transitioning = false;
 
-    this.add.text(400, 18, 'CHAPTER I — WRITTEN IN THE STARS', {
+    this.add.text(WIDTH / 2, 18, 'CHAPTER I — WRITTEN IN THE STARS', {
       fontFamily: 'Georgia', fontSize: '22px', color: '#fff0d7'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(20);
 
-    const spawn = data.spawn || { x: 400, y: 385 };
+    const spawn = data.spawn || courtyardPoint(400, 385);
     this.knight = createKnight(this, spawn.x, spawn.y);
     this.physics.add.collider(this.knight, this.solidObstacles);
     this.interactionPrompt = createInteractionPrompt(this);
     this.cameras.main.fadeIn(250, 0, 0, 0);
 
-    this.star = this.add.star(650, 385, 5, 9, 18, 0xffd86d);
-    this.tweens.add({ targets: this.star, y: 374, duration: 800, yoyo: true, repeat: -1 });
+    const starPosition = courtyardPoint(650, 385);
+    this.star = this.add.star(starPosition.x, starPosition.y, 5, 9, 18, 0xffd86d);
+    this.tweens.add({
+      targets: this.star,
+      y: starPosition.y - 11,
+      duration: 800,
+      yoyo: true,
+      repeat: -1
+    });
     this.completed = false;
+
+    this.cameras.main.setBounds(0, 0, COURTYARD_WORLD_WIDTH, COURTYARD_WORLD_HEIGHT);
+    this.cameras.main.centerOn(this.knight.x, this.knight.y);
+    this.cameras.main.startFollow(this.knight, true, 0.08, 0.08);
+    this.cameras.main.setRoundPixels(true);
   }
 
   update() {
@@ -274,7 +314,7 @@ class AcademyInteriorScene extends Phaser.Scene {
 
   create(data = {}) {
     createOmarAnimations(this);
-    this.physics.world.setBounds(0, 0, WIDTH, HEIGHT);
+    this.physics.world.setBounds(64, 0, 1152, 660);
     this.cameras.main.setBackgroundColor('#302a3b');
 
     const art = this.add.graphics();
@@ -352,14 +392,22 @@ class AcademyInteriorScene extends Phaser.Scene {
     art.fillStyle(0xf0d391);
     art.fillCircle(132, 78, 6);
     art.fillCircle(668, 78, 6);
+    art.setPosition(ACADEMY_ROOM_OFFSET_X, 0);
+    art.setScale(ACADEMY_ROOM_SCALE);
 
-    this.add.text(400, 26, 'THE ROYAL ACADEMY', {
+    this.add.text(WIDTH / 2, 26, 'THE ROYAL ACADEMY', {
       fontFamily: 'Georgia', fontSize: '20px', color: '#fff0d7'
-    }).setOrigin(0.5).setDepth(2);
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(2);
 
     this.solidObstacles = this.physics.add.staticGroup();
     const addObstacle = (x, y, width, height) => {
-      const obstacle = this.add.rectangle(x, y, width, height);
+      const position = academyRoomPoint(x, y);
+      const obstacle = this.add.rectangle(
+        position.x,
+        position.y,
+        width * ACADEMY_ROOM_SCALE,
+        height * ACADEMY_ROOM_SCALE
+      );
       this.physics.add.existing(obstacle, true);
       obstacle.setVisible(false);
       this.solidObstacles.add(obstacle);
@@ -383,16 +431,18 @@ class AcademyInteriorScene extends Phaser.Scene {
     }
 
     const spawn = data.spawn || { x: 400, y: 375 };
-    this.knight = createKnight(this, spawn.x, spawn.y);
+    const roomSpawn = academyRoomPoint(spawn.x, spawn.y);
+    this.knight = createKnight(this, roomSpawn.x, roomSpawn.y, ACADEMY_ROOM_SCALE);
     this.physics.add.collider(this.knight, this.solidObstacles);
+    this.actorDisplayScale = ACADEMY_ROOM_SCALE;
+    this.movementScale = ACADEMY_ROOM_SCALE;
     this.interactionPrompt = createInteractionPrompt(this);
     this.transitioning = false;
     this.dialogueActive = false;
     this.npcs = [];
     createNpc(this, {
       name: 'Rolando',
-      x: 560,
-      y: 232,
+      ...academyRoomPoint(560, 232),
       spriteKey: createRolandoTexture(this),
       dialogue: rolandoDialogue
     });
@@ -425,18 +475,20 @@ class AcademyInteriorScene extends Phaser.Scene {
       return;
     }
 
+    const exit = academyRoomPoint(400, 416);
     const exitDistance = Phaser.Math.Distance.Between(
       this.knight.x,
       this.knight.y,
-      400,
-      416
+      exit.x,
+      exit.y
     );
     this.interactionPrompt
       .setText('Press E to return to the courtyard.')
-      .setVisible(exitDistance < 68);
+      .setVisible(exitDistance < 68 * ACADEMY_ROOM_SCALE);
 
-    if (Phaser.Input.Keyboard.JustDown(this.interactKey) && exitDistance < 68) {
-      transitionTo(this, 'Academy', { spawn: { x: 400, y: 180 } });
+    if (Phaser.Input.Keyboard.JustDown(this.interactKey) &&
+        exitDistance < 68 * ACADEMY_ROOM_SCALE) {
+      transitionTo(this, 'Academy', { spawn: courtyardPoint(400, 230) });
       return;
     }
 
@@ -456,6 +508,13 @@ new Phaser.Game({
   width: WIDTH,
   height: HEIGHT,
   pixelArt: true,
+  roundPixels: true,
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: WIDTH,
+    height: HEIGHT
+  },
   physics: {
     default: 'arcade',
     arcade: {

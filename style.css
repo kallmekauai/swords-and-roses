@@ -1,20 +1,121 @@
-body { margin: 0; background: #141126; color: #fff0d7; font-family: Georgia, serif; text-align: center; }
-main { max-width: 900px; margin: 25px auto; padding: 0 12px; }
-h1 { margin-bottom: 4px; color: #f4c7da; }
-#game { margin: 20px auto; width: min(100%, 800px); }
-canvas { max-width: 100%; height: auto; border: 4px solid #bd91ae; box-sizing: border-box; }
-#message { color: #f8d885; min-height: 1.5em; }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #141126;
+  color: #fff0d7;
+  font-family: Georgia, serif;
+}
+
+main {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+
+.game-header {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px clamp(10px, 2vw, 24px);
+  background: linear-gradient(180deg, rgb(20 17 38 / 82%), rgb(20 17 38 / 0%));
+  pointer-events: none;
+}
+
+.game-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 12px;
+  row-gap: 0;
+}
+
+h1 {
+  margin: 0;
+  color: #f4c7da;
+  font-size: clamp(16px, 2.6vh, 22px);
+  line-height: 1.1;
+}
+
+.game-heading p {
+  margin: 0;
+  color: #d7c5d5;
+  font-size: clamp(12px, 1.8vh, 16px);
+}
+
+#instructions {
+  margin: 0;
+  color: #fff0d7;
+  font-size: clamp(10px, 1.5vh, 13px);
+  text-align: right;
+  text-shadow: 0 1px 3px #000;
+}
+
+#game {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #769b67;
+}
+
+#game canvas {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+#message {
+  position: absolute;
+  z-index: 10;
+  bottom: 8px;
+  left: clamp(10px, 2vw, 24px);
+  max-width: calc(100% - 20px);
+  margin: 0;
+  color: #f8d885;
+  font-size: clamp(11px, 1.7vh, 14px);
+  line-height: 1.2;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+}
 
 .dialogue-box {
   position: fixed;
-  bottom: 35px;
+  bottom: max(12px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  width: min(650px, 85%);
+  width: min(650px, calc(100% - 24px));
   background: #282039;
   border: 3px solid #d7a3bf;
   color: #fff1e7;
-  padding: 20px;
+  padding: clamp(10px, 2vw, 20px);
   box-shadow: 0 6px 25px #0008;
   z-index: 100;
   font-family: Georgia, serif;
@@ -25,20 +126,60 @@ canvas { max-width: 100%; height: auto; border: 4px solid #bd91ae; box-sizing: b
 }
 
 #speaker-name {
+  margin-bottom: 6px;
   color: #f6bdd2;
   font-weight: bold;
-  font-size: 20px;
-  margin-bottom: 10px;
+  font-size: clamp(16px, 2.4vh, 20px);
 }
 
 #dialogue-text {
-  font-size: 17px;
-  line-height: 1.6;
+  margin: 0;
+  font-size: clamp(14px, 2vh, 17px);
+  line-height: 1.5;
 }
 
 .dialogue-hint {
   display: block;
-  text-align: right;
-  font-size: 12px;
+  margin-top: 6px;
   color: #d7a3bf;
+  font-size: 12px;
+  text-align: right;
+}
+
+@media (max-width: 600px) {
+  .game-header {
+    min-height: 36px;
+    padding: 4px 8px;
+  }
+
+  .game-heading {
+    display: block;
+  }
+
+  .game-heading p {
+    font-size: 11px;
+  }
+
+  #instructions {
+    max-width: 48%;
+    font-size: 10px;
+  }
+}
+
+@media (max-height: 420px) {
+  .game-header {
+    min-height: 28px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  h1 {
+    font-size: 17px;
+  }
+
+  .game-heading p,
+  #instructions,
+  #message {
+    font-size: 10px;
+  }
 }
