@@ -52,6 +52,7 @@ function createAcademyMap(scene) {
   map.fillStyle(0xe9d9f2);
   map.fillCircle(400, 330, 9);
 
+scene.castleEntrance = { x: 400, y: 180, radius: 68 };
 scene.physics.world.setBounds(0, 0, 800, 480);
 scene.solidObstacles = scene.physics.add.staticGroup();
 

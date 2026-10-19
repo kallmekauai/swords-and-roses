@@ -3,6 +3,8 @@ function createOmarAnimations(scene) {
   const directions = ["down", "up", "left", "right"];
 
   directions.forEach(direction => {
+    if (scene.anims.exists(`walk-${direction}`)) return;
+
     for (let frame = 0; frame < 4; frame++) {
       const canvas = document.createElement("canvas");
       canvas.width = 32;
