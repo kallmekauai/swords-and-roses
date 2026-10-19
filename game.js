@@ -42,13 +42,7 @@ class AcademyScene extends Phaser.Scene {
   create() {
     createOmarAnimations(this);
     this.cameras.main.setBackgroundColor('#252341');
-    const graphics = this.add.graphics();
-    graphics.fillStyle(0x355448).fillRect(0, 330, WIDTH, 150);
-    graphics.fillStyle(0x7e668b).fillRect(225, 145, 350, 190);
-    graphics.fillStyle(0xbda1bd).fillRect(245, 165, 310, 170);
-    graphics.fillStyle(0x4a344e).fillTriangle(200, 150, 400, 50, 600, 150);
-    graphics.fillStyle(0x563d60).fillRect(365, 260, 70, 75);
-    graphics.fillStyle(0xffd787).fillRect(285, 210, 45, 45).fillRect(470, 210, 45, 45);
+     createAcademyMap(this);
     this.princess = this.add.sprite(550, 385, 'kauai');
 
 this.princess.setDisplaySize(48, 64);
@@ -63,11 +57,11 @@ this.dialogueCooldown = false;
 
     
 this.knight = this.physics.add.sprite(400, 385, 'omar-down-0');
-
 this.knight.setDisplaySize(32, 48);
+this.knight.body.setSize(20, 12);
+this.knight.body.setOffset(6, 34);
 this.knight.setCollideWorldBounds(true);
-this.knight.body.setSize(20, 24);
-this.knight.body.setOffset(22, 64);
+this.physics.add.collider(this.knight, this.solidObstacles);
 this.interactKey = this.input.keyboard.addKey(
   Phaser.Input.Keyboard.KeyCodes.E
 );
@@ -173,12 +167,23 @@ if (direction) {
 } // End of AcademyScene class
 
 
+const debugCollisions =
+  new URLSearchParams(window.location.search).get('debugCollisions') === '1';
+
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: WIDTH,
   height: HEIGHT,
   pixelArt: true,
-  physics: { default: 'arcade', arcade: { debug: false } },
+  physics: {
+    default: 'arcade',
+    arcade: {
+      debug: debugCollisions,
+      debugShowBody: debugCollisions,
+      debugShowStaticBody: debugCollisions,
+      debugShowVelocity: false
+    }
+  },
   scene: [AcademyScene]
 });
