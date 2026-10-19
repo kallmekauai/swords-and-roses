@@ -1,10 +1,19 @@
 const WIDTH = 800;
 const HEIGHT = 480;
 
+
 class AcademyScene extends Phaser.Scene {
   constructor() { super('Academy'); }
 
+  preload() {
+    this.load.svg('omar', 'assets/omar.svg', {
+      width: 64,
+      height: 96
+    });
+  }
+
   create() {
+
     this.cameras.main.setBackgroundColor('#252341');
     const graphics = this.add.graphics();
     graphics.fillStyle(0x355448).fillRect(0, 330, WIDTH, 150);
@@ -18,11 +27,14 @@ class AcademyScene extends Phaser.Scene {
       fontFamily: 'Georgia', fontSize: '22px', color: '#fff0d7'
     }).setOrigin(0.5);
 
-    // Placeholder knight; replace with Omar's sprite sheet later.
-    this.knight = this.add.rectangle(400, 385, 26, 38, 0x82b7df);
-    this.add.rectangle(400, 362, 18, 17, 0x9c654c);
-    this.physics.add.existing(this.knight);
-    this.knight.body.setCollideWorldBounds(true);
+    
+this.knight = this.physics.add.sprite(400, 385, 'omar');
+
+this.knight.setDisplaySize(32, 48);
+this.knight.setCollideWorldBounds(true);
+this.knight.body.setSize(20, 24);
+this.knight.body.setOffset(22, 64);
+
 
     this.star = this.add.star(650, 385, 5, 9, 18, 0xffd86d);
     this.tweens.add({ targets: this.star, y: 374, duration: 800, yoyo: true, repeat: -1 });
