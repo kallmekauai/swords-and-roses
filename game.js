@@ -24,9 +24,91 @@ const kauaiDialogue = [
   }
 ];
 
+const rolandoDialogue = [
+  { speaker: 'Rolando', text: 'Welcome to the Royal Academy, Sir Omar!' },
+  { speaker: 'Omar', text: "Thank you. I'm still finding my way around." },
+  { speaker: 'Rolando', text: 'Every great knight begins somewhere.' }
+];
+
+function createRolandoTexture(scene) {
+  const textureKey = 'rolando-pixel';
+  if (scene.textures.exists(textureKey)) return textureKey;
+
+  const texture = scene.textures.createCanvas(textureKey, 32, 48);
+  const context = texture.getContext();
+  const pixel = (x, y, width, height, color) => {
+    context.fillStyle = color;
+    context.fillRect(x, y, width, height);
+  };
+
+  pixel(5, 19, 22, 24, '#6f3548');
+  pixel(8, 32, 7, 9, '#555b70');
+  pixel(18, 32, 7, 9, '#555b70');
+  pixel(7, 39, 8, 7, '#302638');
+  pixel(18, 39, 8, 7, '#302638');
+  pixel(3, 20, 6, 15, '#8d776e');
+  pixel(24, 20, 6, 15, '#8d776e');
+  pixel(8, 19, 17, 16, '#c7ad83');
+  pixel(14, 20, 5, 12, '#e2c875');
+  pixel(8, 33, 17, 4, '#77644f');
+  pixel(10, 7, 13, 13, '#b47a57');
+  pixel(11, 13, 3, 2, '#211c25');
+  pixel(19, 13, 3, 2, '#211c25');
+  pixel(8, 4, 17, 6, '#4a3028');
+  pixel(8, 9, 3, 6, '#4a3028');
+  pixel(23, 9, 3, 6, '#4a3028');
+  pixel(3, 19, 7, 5, '#d9c69b');
+  pixel(23, 19, 7, 5, '#d9c69b');
+
+  texture.refresh();
+  return textureKey;
+}
+
+function createNpc(scene, { name, x, y, spriteKey, dialogue, interactionDistance = 72 }) {
+  const sprite = scene.add.image(x, y, spriteKey)
+    .setDisplaySize(32, 48)
+    .setDepth(3);
+  const npc = { name, x, y, sprite, dialogue, interactionDistance };
+  scene.npcs.push(npc);
+  return npc;
+}
+
+function findNearbyNpc(scene) {
+  return scene.npcs.find(npc =>
+    Phaser.Math.Distance.Between(scene.knight.x, scene.knight.y, npc.x, npc.y) <
+      npc.interactionDistance
+  );
+}
+
+function beginDialogue(scene, lines) {
+  scene.dialogueActive = true;
+  scene.dialogueIndex = 0;
+  scene.dialogueLines = lines;
+  showDialogueLine(scene);
+}
+
+function advanceDialogue(scene) {
+  scene.dialogueIndex++;
+  if (scene.dialogueIndex >= scene.dialogueLines.length) {
+    scene.dialogueActive = false;
+    document.getElementById('dialogue-box').classList.add('hidden');
+    return;
+  }
+
+  showDialogueLine(scene);
+}
+
+function showDialogueLine(scene) {
+  const line = scene.dialogueLines[scene.dialogueIndex];
+  document.getElementById('speaker-name').textContent = line.speaker;
+  document.getElementById('dialogue-text').textContent = line.text;
+  document.getElementById('dialogue-box').classList.remove('hidden');
+}
+
 function createKnight(scene, x, y) {
   const knight = scene.physics.add.sprite(x, y, 'omar-down-0');
   knight.setDisplaySize(32, 48);
+  knight.setDepth(2);
   knight.body.setSize(20, 12);
   knight.body.setOffset(6, 34);
   knight.setCollideWorldBounds(true);
@@ -127,6 +209,15 @@ class AcademyScene extends Phaser.Scene {
   update() {
     if (this.transitioning) return;
 
+    if (this.dialogueActive) {
+      if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+        advanceDialogue(this);
+      }
+      this.knight.setVelocity(0, 0);
+      this.knight.anims.stop();
+      return;
+    }
+
     const entranceDistance = Phaser.Math.Distance.Between(
       this.knight.x,
       this.knight.y,
@@ -135,15 +226,9 @@ class AcademyScene extends Phaser.Scene {
     );
     this.interactionPrompt
       .setText('Press E to enter the Royal Academy.')
-      .setVisible(!this.dialogueActive && entranceDistance < this.castleEntrance.radius);
+      .setVisible(entranceDistance < this.castleEntrance.radius);
 
     if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
-      if (this.dialogueActive) {
-        this.dialogueIndex++;
-        this.showDialogueLine();
-        return;
-      }
-
       const princessDistance = Phaser.Math.Distance.Between(
         this.knight.x,
         this.knight.y,
@@ -179,28 +264,7 @@ class AcademyScene extends Phaser.Scene {
   }
   
   startKauaiDialogue() {
-    this.dialogueActive = true;
-    this.dialogueIndex = 0;
-    this.showDialogueLine();
-  }
-  showDialogueLine() {
-    const box = document.getElementById("dialogue-box");
-
-    if (this.dialogueIndex >= kauaiDialogue.length) {
-      this.dialogueActive = false;
-      box.classList.add("hidden");
-      return;
-    }
-
-    const line = kauaiDialogue[this.dialogueIndex];
-
-    document.getElementById("speaker-name").textContent =
-      line.speaker;
-
-    document.getElementById("dialogue-text").textContent =
-      line.text;
-
-    box.classList.remove("hidden");
+    beginDialogue(this, kauaiDialogue);
   }
 
 } // End of AcademyScene class
@@ -323,11 +387,43 @@ class AcademyInteriorScene extends Phaser.Scene {
     this.physics.add.collider(this.knight, this.solidObstacles);
     this.interactionPrompt = createInteractionPrompt(this);
     this.transitioning = false;
+    this.dialogueActive = false;
+    this.npcs = [];
+    createNpc(this, {
+      name: 'Rolando',
+      x: 560,
+      y: 232,
+      spriteKey: createRolandoTexture(this),
+      dialogue: rolandoDialogue
+    });
     this.cameras.main.fadeIn(250, 0, 0, 0);
   }
 
   update() {
     if (this.transitioning) return;
+
+    if (this.dialogueActive) {
+      if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+        advanceDialogue(this);
+      }
+      this.knight.setVelocity(0, 0);
+      this.knight.anims.stop();
+      this.interactionPrompt.setVisible(false);
+      return;
+    }
+
+    const nearbyNpc = findNearbyNpc(this);
+    this.interactionPrompt
+      .setText(nearbyNpc ? `Press E to talk to ${nearbyNpc.name}.` : '')
+      .setVisible(Boolean(nearbyNpc));
+
+    if (nearbyNpc && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+      beginDialogue(this, nearbyNpc.dialogue);
+      this.knight.setVelocity(0, 0);
+      this.knight.anims.stop();
+      this.interactionPrompt.setVisible(false);
+      return;
+    }
 
     const exitDistance = Phaser.Math.Distance.Between(
       this.knight.x,
@@ -349,6 +445,8 @@ class AcademyInteriorScene extends Phaser.Scene {
 }
 
 
+const launchIsometric =
+  new URLSearchParams(window.location.search).get('scene') === 'isometric';
 const debugCollisions =
   new URLSearchParams(window.location.search).get('debugCollisions') === '1';
 
@@ -367,5 +465,7 @@ new Phaser.Game({
       debugShowVelocity: false
     }
   },
-  scene: [AcademyScene, AcademyInteriorScene]
+  scene: launchIsometric
+    ? [IsometricCourtyardScene]
+    : [AcademyScene, AcademyInteriorScene]
 });
