@@ -13,7 +13,7 @@ class AcademyScene extends Phaser.Scene {
   }
 
   create() {
-
+    createOmarAnimations(this);
     this.cameras.main.setBackgroundColor('#252341');
     const graphics = this.add.graphics();
     graphics.fillStyle(0x355448).fillRect(0, 330, WIDTH, 150);
@@ -28,7 +28,7 @@ class AcademyScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     
-this.knight = this.physics.add.sprite(400, 385, 'omar');
+this.knight = this.physics.add.sprite(400, 385, 'omar-down-0');
 
 this.knight.setDisplaySize(32, 48);
 this.knight.setCollideWorldBounds(true);
@@ -52,6 +52,25 @@ this.knight.body.setOffset(22, 64);
     if (this.cursors.up.isDown || this.keys.W.isDown) body.setVelocityY(-speed);
     else if (this.cursors.down.isDown || this.keys.S.isDown) body.setVelocityY(speed);
     body.velocity.normalize().scale(speed);
+    
+let direction = null;
+
+if (body.velocity.x < 0) {
+  direction = "left";
+} else if (body.velocity.x > 0) {
+  direction = "right";
+} else if (body.velocity.y < 0) {
+  direction = "up";
+} else if (body.velocity.y > 0) {
+  direction = "down";
+}
+
+if (direction) {
+  this.knight.anims.play(`walk-${direction}`, true);
+} else {
+  this.knight.anims.stop();
+}
+
 
     if (!this.completed && Phaser.Input.Keyboard.JustDown(this.keys.E) &&
         Phaser.Math.Distance.Between(this.knight.x, this.knight.y, this.star.x, this.star.y) < 65) {
