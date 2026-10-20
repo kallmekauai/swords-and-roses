@@ -87,7 +87,8 @@ function createNpc(
   const displayScale = scene.actorDisplayScale || 1;
   const sprite = scene.add.image(x, y, spriteKey)
     .setDisplaySize(32 * displayScale, 48 * displayScale)
-    .setDepth(3);
+    .setOrigin(0.5, scene.depthSortActors ? 1 : 0.5)
+    .setDepth(scene.depthSortActors ? y : 3);
   const npc = {
     name,
     x,
