@@ -1,21 +1,27 @@
 const ISO_TILE_WIDTH = 64;
 const ISO_TILE_HEIGHT = 32;
 
-const ISO_MAP_COLUMNS = 24;
-const ISO_MAP_ROWS = 18;
+const ISO_MAP_COLUMNS = 40;
+const ISO_MAP_ROWS = 28;
 const ISO_ORIGIN_X = ISO_MAP_ROWS * ISO_TILE_WIDTH / 2 + 32;
-const ISO_ORIGIN_Y = 40;
+const ISO_ORIGIN_Y = 120;
 const ISO_WORLD_WIDTH = ISO_ORIGIN_X + ISO_MAP_COLUMNS * ISO_TILE_WIDTH / 2 + 32;
 const ISO_WORLD_HEIGHT =
   ISO_ORIGIN_Y + (ISO_MAP_COLUMNS + ISO_MAP_ROWS) * ISO_TILE_HEIGHT / 2 + 32;
 const ISO_FOUNTAIN_TILE = { x: 14, y: 12 };
 const ISO_PLAYER_SPAWN_TILE = { x: 9, y: 15 };
+const ISO_CASTLE_ENTRANCE_TILE = { x: 10, y: 8 };
+const ISO_STAIRWAY_LOWER_OFFSET_Y = 58;
+const ISO_STAIRWAY_UPPER_OFFSET_Y = 18;
+const ISO_STAIRWAY_UPPER_OFFSET_X = -12;
+const ISO_STAIRWAY_HALF_WIDTH = 25;
 const ISO_PATH_SEGMENTS = [
   [{ x: 8, y: 6 }, { x: 12, y: 10 }],
   [{ x: 12, y: 10 }, { x: 11, y: 11 }],
   [{ x: 11, y: 11 }, { x: 11, y: 12 }],
   [{ x: 11, y: 12 }, { x: 14, y: 15 }],
   [{ x: 14, y: 15 }, { x: 17, y: 12 }],
+  [{ x: 12, y: 10 }, { x: 14, y: 12 }],
   [{ x: 12, y: 10 }, { x: 13, y: 10 }],
   [{ x: 13, y: 10 }, { x: 14, y: 9 }],
   [{ x: 14, y: 9 }, { x: 17, y: 12 }],
@@ -53,126 +59,270 @@ function isIsoPavedTile(tileX, tileY) {
   return pathDistance <= 0.8 || isFountainPlaza;
 }
 
+function getStairwayPoint(progress, doorAnchor) {
+  return {
+    x: doorAnchor.x + ISO_STAIRWAY_UPPER_OFFSET_X * progress,
+    y: doorAnchor.y + ISO_STAIRWAY_LOWER_OFFSET_Y +
+      (ISO_STAIRWAY_UPPER_OFFSET_Y - ISO_STAIRWAY_LOWER_OFFSET_Y) * progress
+  };
+}
+
+function getStairwayProgress(worldX, worldY, doorAnchor) {
+  const lower = getStairwayPoint(0, doorAnchor);
+  const upper = getStairwayPoint(1, doorAnchor);
+  const pathX = upper.x - lower.x;
+  const pathY = upper.y - lower.y;
+  const lengthSquared = pathX ** 2 + pathY ** 2;
+  const progress = Phaser.Math.Clamp(
+    ((worldX - lower.x) * pathX + (worldY - lower.y) * pathY) /
+      lengthSquared,
+    0,
+    1
+  );
+  const point = getStairwayPoint(progress, doorAnchor);
+
+  return {
+    progress,
+    distance: Phaser.Math.Distance.Between(worldX, worldY, point.x, point.y)
+  };
+}
+
 const ISO_ASSET_MANIFEST = {
   ground: [{
     key: 'iso-cobblestone-tile',
     path: 'assets/art/academy-cobblestone-tile.png'
+  }, {
+    key: 'iso-grass-tile',
+    path: 'assets/art/courtyard-tiles/grass-tile.png'
   }],
-  buildings: [
+  buildings: [],
+  castle: [
     {
-      id: 'academy-blue-tower-west',
-      key: 'iso-blue-tower',
-      path: 'assets/art/academy-blue-tower.png',
-      tileX: 3,
-      tileY: 11,
+      id: 'castle-roof-center',
+      key: 'castle-roof-central',
+      path: 'assets/art/castle-modules/roof-central-large.png',
+      offsetX: 0,
+      offsetY: -200,
+      scale: 1.1
+    },
+    {
+      id: 'castle-roof-left-inner',
+      key: 'castle-roof-corner-left',
+      path: 'assets/art/castle-modules/roof-corner-left.png',
+      offsetX: -150,
+      offsetY: -200,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-right-inner',
+      key: 'castle-roof-corner-right',
+      path: 'assets/art/castle-modules/roof-corner-right.png',
+      offsetX: 150,
+      offsetY: -200,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-left-wing',
+      key: 'castle-roof-straight',
+      path: 'assets/art/castle-modules/roof-straight.png',
+      offsetX: -260,
+      offsetY: -198,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-right-wing',
+      key: 'castle-roof-straight',
+      path: 'assets/art/castle-modules/roof-straight.png',
+      offsetX: 260,
+      offsetY: -198,
+      flipX: true,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-left-middle',
+      key: 'castle-roof-straight',
+      path: 'assets/art/castle-modules/roof-straight.png',
+      offsetX: -375,
+      offsetY: -198,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-right-middle',
+      key: 'castle-roof-straight',
+      path: 'assets/art/castle-modules/roof-straight.png',
+      offsetX: 375,
+      offsetY: -198,
+      flipX: true,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-left-outer',
+      key: 'castle-roof-straight',
+      path: 'assets/art/castle-modules/roof-straight.png',
+      offsetX: -490,
+      offsetY: -198,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-right-outer',
+      key: 'castle-roof-straight',
+      path: 'assets/art/castle-modules/roof-straight.png',
+      offsetX: 490,
+      offsetY: -198,
+      flipX: true,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-left-end',
+      key: 'castle-roof-end',
+      path: 'assets/art/castle-modules/roof-end.png',
+      offsetX: -590,
+      offsetY: -198,
+      scale: 1
+    },
+    {
+      id: 'castle-roof-right-end',
+      key: 'castle-roof-end',
+      path: 'assets/art/castle-modules/roof-end.png',
+      offsetX: 590,
+      offsetY: -198,
+      flipX: true,
+      scale: 1
+    },
+    {
+      id: 'castle-wall-left-inner',
+      key: 'castle-wall-straight',
+      path: 'assets/art/castle-modules/wall-straight.png',
+      offsetX: -160,
+      offsetY: 0,
+      scale: 1
+    },
+    {
+      id: 'castle-wall-right-inner',
+      key: 'castle-wall-straight',
+      path: 'assets/art/castle-modules/wall-straight.png',
+      offsetX: 160,
+      offsetY: 0,
+      flipX: true,
+      scale: 1
+    },
+    {
+      id: 'castle-column-left',
+      key: 'castle-wall-column',
+      path: 'assets/art/castle-modules/wall-column.png',
+      offsetX: -112,
+      offsetY: 0,
+      scale: 0.9
+    },
+    {
+      id: 'castle-column-right',
+      key: 'castle-wall-column',
+      path: 'assets/art/castle-modules/wall-column.png',
+      offsetX: 112,
+      offsetY: 0,
+      flipX: true,
+      scale: 0.9
+    },
+    {
+      id: 'castle-wall-left-window',
+      key: 'castle-wall-window',
+      path: 'assets/art/castle-modules/wall-window.png',
+      offsetX: -260,
+      offsetY: 0,
+      scale: 1
+    },
+    {
+      id: 'castle-wall-right-window',
+      key: 'castle-wall-window',
+      path: 'assets/art/castle-modules/wall-window.png',
+      offsetX: 260,
+      offsetY: 0,
+      flipX: true,
+      scale: 1
+    },
+    {
+      id: 'castle-wall-left-banner',
+      key: 'castle-wall-banner',
+      path: 'assets/art/castle-modules/wall-banner.png',
+      offsetX: -355,
+      offsetY: 0,
+      scale: 1
+    },
+    {
+      id: 'castle-wall-right-banner',
+      key: 'castle-wall-banner',
+      path: 'assets/art/castle-modules/wall-banner.png',
+      offsetX: 355,
+      offsetY: 0,
+      flipX: true,
+      scale: 1
+    },
+    {
+      id: 'castle-wall-left-wing',
+      key: 'castle-wall-long',
+      path: 'assets/art/castle-modules/wall-long.png',
+      offsetX: -470,
+      offsetY: 0,
+      scale: 1
+    },
+    {
+      id: 'castle-wall-right-wing',
+      key: 'castle-wall-long',
+      path: 'assets/art/castle-modules/wall-long.png',
+      offsetX: 470,
+      offsetY: 0,
+      flipX: true,
+      scale: 1
+    },
+    {
+      id: 'castle-inner-tower-left',
+      key: 'castle-tower-tall-spire',
+      path: 'assets/art/castle-modules/tower-tall-spire.png',
+      offsetX: -385,
+      offsetY: -14,
+      scale: 1.05
+    },
+    {
+      id: 'castle-inner-tower-right',
+      key: 'castle-tower-tall-spire',
+      path: 'assets/art/castle-modules/tower-tall-spire.png',
+      offsetX: 385,
+      offsetY: -14,
+      scale: 1.05
+    },
+    {
+      id: 'castle-outer-tower-left',
+      key: 'castle-tower-round',
+      path: 'assets/art/castle-modules/tower-round.png',
+      offsetX: -600,
+      offsetY: 10,
+      scale: 1.12
+    },
+    {
+      id: 'castle-outer-tower-right',
+      key: 'castle-tower-round',
+      path: 'assets/art/castle-modules/tower-round.png',
+      offsetX: 600,
+      offsetY: 10,
+      flipX: true,
+      scale: 1.12
+    },
+    {
+      id: 'castle-entrance',
+      key: 'castle-double-doors',
+      path: 'assets/art/castle-modules/entrance-double-doors.png',
+      offsetX: 0,
+      offsetY: 3,
+      scale: 1
+    },
+    {
+      id: 'castle-grand-staircase',
+      key: 'castle-grand-staircase',
+      path: 'assets/art/castle-modules/grand-staircase.png',
+      offsetX: 0,
+      offsetY: 58,
       scale: 0.9,
-      collision: { x: 4, y: 210, width: 52, height: 25 }
-    },
-    {
-      id: 'academy-stained-glass-west-outer',
-      key: 'iso-stained-glass-wall',
-      path: 'assets/art/academy-stained-glass-wall.png',
-      tileX: 4,
-      tileY: 10,
-      scale: 0.95,
-      collision: { x: 10, y: 132, width: 64, height: 23 }
-    },
-    {
-      id: 'academy-watchtower-wall-west',
-      key: 'iso-stained-glass-wall',
-      path: 'assets/art/academy-stained-glass-wall.png',
-      tileX: 5,
-      tileY: 9,
-      scale: 0.95
-    },
-    {
-      id: 'academy-blue-watchtower-west',
-      key: 'iso-blue-watchtower',
-      path: 'assets/art/academy-blue-watchtower.png',
-      tileX: 5,
-      tileY: 9,
-      scale: 0.82,
-      collision: { x: 4, y: 128, width: 20, height: 18 }
-    },
-    {
-      id: 'academy-stained-glass-west-inner',
-      key: 'iso-stained-glass-wall',
-      path: 'assets/art/academy-stained-glass-wall.png',
-      tileX: 6,
-      tileY: 8,
-      scale: 0.95,
-      collision: { x: 10, y: 132, width: 64, height: 23 }
-    },
-    {
-      id: 'academy-stained-glass-east-inner',
-      key: 'iso-stained-glass-wall',
-      path: 'assets/art/academy-stained-glass-wall.png',
-      tileX: 10,
-      tileY: 4,
-      scale: 0.95,
-      collision: { x: 10, y: 132, width: 64, height: 23 }
-    },
-    {
-      id: 'academy-watchtower-wall-east',
-      key: 'iso-stained-glass-wall',
-      path: 'assets/art/academy-stained-glass-wall.png',
-      tileX: 11,
-      tileY: 3,
-      scale: 0.95
-    },
-    {
-      id: 'academy-blue-watchtower-east',
-      key: 'iso-blue-watchtower',
-      path: 'assets/art/academy-blue-watchtower.png',
-      tileX: 11,
-      tileY: 3,
-      scale: 0.82,
-      collision: { x: 4, y: 128, width: 20, height: 18 }
-    },
-    {
-      id: 'academy-stained-glass-east-outer',
-      key: 'iso-stained-glass-wall',
-      path: 'assets/art/academy-stained-glass-wall.png',
-      tileX: 12,
-      tileY: 2,
-      scale: 0.95,
-      collision: { x: 10, y: 132, width: 64, height: 23 }
-    },
-    {
-      id: 'academy-blue-tower-east',
-      key: 'iso-blue-tower',
-      path: 'assets/art/academy-blue-tower.png',
-      tileX: 13,
-      tileY: 1,
-      scale: 0.9,
-      collision: { x: 4, y: 210, width: 52, height: 25 }
-    },
-    {
-      id: 'academy-rose-pilaster-west',
-      key: 'iso-garden-column',
-      path: 'assets/art/garden-column.png',
-      tileX: 7,
-      tileY: 7,
-      scale: 0.58,
-      collision: { x: 12, y: 179, width: 49, height: 24 }
-    },
-    {
-      id: 'academy-rose-pilaster-east',
-      key: 'iso-garden-column',
-      path: 'assets/art/garden-column.png',
-      tileX: 9,
-      tileY: 5,
-      scale: 0.58,
-      collision: { x: 12, y: 179, width: 49, height: 24 }
-    },
-    {
-      id: 'academy-grand-staircase',
-      key: 'iso-grand-staircase',
-      path: 'assets/art/academy-staircase.png',
-      tileX: 8,
-      tileY: 6,
-      scale: 1.5,
-      collision: { x: 9, y: 60, width: 56, height: 19 }
+      depthOffset: 1
     }
   ],
   decorations: [
@@ -514,7 +664,7 @@ class IsometricCourtyardScene extends Phaser.Scene {
     });
   }
 
-  create() {
+  create(data = {}) {
     createOmarAnimations(this);
     this.cameras.main.setBackgroundColor('#557653');
     this.physics.world.setBounds(0, 0, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
@@ -528,6 +678,7 @@ class IsometricCourtyardScene extends Phaser.Scene {
       foreground: []
     };
     this.manifestSprites = new Map();
+    this.collisionDebugObjects = [];
     this.depthSortActors = true;
     this.npcs = [];
     this.dialogueActive = false;
@@ -536,12 +687,22 @@ class IsometricCourtyardScene extends Phaser.Scene {
     this.debugCollision =
       new URLSearchParams(window.location.search).get('debugCollision') === '1';
     this.fountainAsset = ISO_ASSET_MANIFEST.fountain[0];
+    const entrance = isoTileToWorld(
+      ISO_CASTLE_ENTRANCE_TILE.x,
+      ISO_CASTLE_ENTRANCE_TILE.y
+    );
+    this.castleDoorAnchor = entrance;
+    this.castleEntrance = {
+      x: entrance.x,
+      y: entrance.y + ISO_STAIRWAY_UPPER_OFFSET_Y,
+      radius: 20
+    };
 
     this.drawGroundLayer();
     this.drawStructureLayer();
     this.drawFountain(ISO_FOUNTAIN_TILE);
 
-    const spawn = isoTileToWorld(
+    const spawn = data.spawn || isoTileToWorld(
       ISO_PLAYER_SPAWN_TILE.x,
       ISO_PLAYER_SPAWN_TILE.y
     );
@@ -554,6 +715,11 @@ class IsometricCourtyardScene extends Phaser.Scene {
       this.fountainBody
     );
     this.createStaticCollisionLayer();
+    this.interactionPrompt = createInteractionPrompt(this);
+
+    if (this.debugCollision) {
+      this.drawStairwayDebug();
+    }
 
     this.drawForegroundLayer();
     this.add.text(16, 52, 'EXPERIMENTAL ISOMETRIC COURTYARD  |  WASD / ARROWS', {
@@ -568,6 +734,7 @@ class IsometricCourtyardScene extends Phaser.Scene {
     this.cameras.main.centerOn(this.knight.x, this.knight.y);
     this.cameras.main.startFollow(this.knight, true, 0.08, 0.08);
     this.cameras.main.setRoundPixels(true);
+    this.cameras.main.fadeIn(250, 0, 0, 0);
   }
 
   addLayerObject(layer, gameObject, depth) {
@@ -588,9 +755,35 @@ class IsometricCourtyardScene extends Phaser.Scene {
     );
   }
 
+  addCollisionDebug(body) {
+    if (!this.debugCollision) return null;
+
+    const { x, y, width, height } = body.body;
+    const debug = this.add.graphics();
+    debug.fillStyle(0xff2020, 0.28);
+    debug.fillRect(x, y, width, height);
+    debug.lineStyle(2, 0xff3030, 1);
+    debug.strokeRect(x, y, width, height);
+    debug.setDepth(10000);
+    this.collisionDebugObjects.push(debug);
+    return debug;
+  }
+
+  addStaticCollision(x, y, width, height) {
+    const body = this.add.zone(x, y, width, height);
+    this.physics.add.existing(body, true);
+    this.staticCollisionBodies.push(body);
+    this.staticColliders.push(this.physics.add.collider(this.knight, body));
+
+    const debug = this.addCollisionDebug(body);
+    if (debug) this.staticCollisionDebug.push(debug);
+    return body;
+  }
+
   drawGroundLayer() {
     const ground = this.add.graphics();
     const pavingAsset = ISO_ASSET_MANIFEST.ground[0];
+    const grassAsset = ISO_ASSET_MANIFEST.ground[1];
     const pathColor = 0xa99e8d;
     const grassColor = 0x5b7d56;
 
@@ -608,6 +801,15 @@ class IsometricCourtyardScene extends Phaser.Scene {
 
         ground.fillStyle(color, 1);
         ground.fillPoints(points, true);
+        const grass = this.add.image(center.x, center.y, grassAsset.key)
+          .setOrigin(0.5)
+          .setScale(0.78);
+        this.addLayerObject(
+          'ground',
+          grass,
+          -1000 + (tileX + tileY) * 0.01
+        );
+
         if (isPath) {
           ground.lineStyle(1, 0x8c8278, 0.3);
           ground.strokePoints(points, true);
@@ -624,12 +826,72 @@ class IsometricCourtyardScene extends Phaser.Scene {
       }
     }
 
-    this.addLayerObject('ground', ground, -1000);
+    this.addLayerObject('ground', ground, -1100);
   }
 
   drawStructureLayer() {
+    this.drawAcademyCastle();
     this.addManifestSprites('structures', ISO_ASSET_MANIFEST.buildings);
     this.addManifestSprites('decorations', ISO_ASSET_MANIFEST.decorations);
+  }
+
+  drawAcademyCastle() {
+    const { x: entranceX, y: entranceY } = this.castleDoorAnchor;
+
+    for (const asset of ISO_ASSET_MANIFEST.castle) {
+      const sprite = this.add.image(
+        entranceX + asset.offsetX,
+        entranceY + asset.offsetY,
+        asset.key
+      )
+        .setOrigin(0.5, 1)
+        .setScale(asset.scale);
+      if (asset.flipX) sprite.setFlipX(true);
+      if (asset.id === 'castle-grand-staircase') {
+        this.staircaseSprite = sprite;
+      }
+      this.addLayerObject(
+        'structures',
+        sprite,
+        sprite.y + (asset.depthOffset ?? 0)
+      );
+    }
+  }
+
+  drawStairwayDebug() {
+    const lower = getStairwayPoint(0, this.castleDoorAnchor);
+    const upper = getStairwayPoint(1, this.castleDoorAnchor);
+    const pathX = upper.x - lower.x;
+    const pathY = upper.y - lower.y;
+    const length = Math.hypot(pathX, pathY);
+    const normalX = -pathY / length;
+    const normalY = pathX / length;
+    const graphics = this.add.graphics();
+
+    graphics.fillStyle(0x50ffbd, 0.16);
+    graphics.fillPoints([
+      { x: lower.x + normalX * ISO_STAIRWAY_HALF_WIDTH, y: lower.y + normalY * ISO_STAIRWAY_HALF_WIDTH },
+      { x: upper.x + normalX * ISO_STAIRWAY_HALF_WIDTH, y: upper.y + normalY * ISO_STAIRWAY_HALF_WIDTH },
+      { x: upper.x - normalX * ISO_STAIRWAY_HALF_WIDTH, y: upper.y - normalY * ISO_STAIRWAY_HALF_WIDTH },
+      { x: lower.x - normalX * ISO_STAIRWAY_HALF_WIDTH, y: lower.y - normalY * ISO_STAIRWAY_HALF_WIDTH }
+    ], true);
+    graphics.lineStyle(2, 0x50ffbd, 0.9);
+    graphics.lineBetween(
+      lower.x + normalX * ISO_STAIRWAY_HALF_WIDTH,
+      lower.y + normalY * ISO_STAIRWAY_HALF_WIDTH,
+      upper.x + normalX * ISO_STAIRWAY_HALF_WIDTH,
+      upper.y + normalY * ISO_STAIRWAY_HALF_WIDTH
+    );
+    graphics.lineBetween(
+      lower.x - normalX * ISO_STAIRWAY_HALF_WIDTH,
+      lower.y - normalY * ISO_STAIRWAY_HALF_WIDTH,
+      upper.x - normalX * ISO_STAIRWAY_HALF_WIDTH,
+      upper.y - normalY * ISO_STAIRWAY_HALF_WIDTH
+    );
+    graphics.lineStyle(1, 0xffda74, 0.95);
+    graphics.strokeCircle(this.castleEntrance.x, this.castleEntrance.y, this.castleEntrance.radius);
+    graphics.setDepth(10001);
+    this.collisionDebugObjects.push(graphics);
   }
 
   drawFountain(tile) {
@@ -693,22 +955,56 @@ class IsometricCourtyardScene extends Phaser.Scene {
         const y = top + (collision.y + collision.height / 2) * scaleY;
         const width = collision.width * scaleX;
         const height = collision.height * scaleY;
-        const body = this.add.zone(x, y, width, height);
-        this.physics.add.existing(body, true);
-        this.staticCollisionBodies.push(body);
-        this.staticColliders.push(this.physics.add.collider(this.knight, body));
+        this.addStaticCollision(x, y, width, height);
+      }
+    }
 
-        if (this.debugCollision) {
-          const { x: bodyX, y: bodyY, width: bodyWidth, height: bodyHeight } =
-            body.body;
-          const debug = this.add.graphics();
-          debug.fillStyle(0xff2020, 0.28);
-          debug.fillRect(bodyX, bodyY, bodyWidth, bodyHeight);
-          debug.lineStyle(2, 0xff3030, 1);
-          debug.strokeRect(bodyX, bodyY, bodyWidth, bodyHeight);
-          debug.setDepth(10000);
-          this.staticCollisionDebug.push(debug);
-        }
+    const { x: doorX, y: doorY } = this.castleDoorAnchor;
+    for (const side of [-1, 1]) {
+      this.addStaticCollision(
+        doorX + side * 350,
+        doorY + 1,
+        510,
+        20
+      );
+      this.addStaticCollision(
+        doorX + side * 84,
+        doorY + 38,
+        12,
+        52
+      );
+      this.addStaticCollision(
+        doorX + side * 410,
+        doorY - 10,
+        74,
+        28
+      );
+      this.addStaticCollision(
+        doorX + side * 610,
+        doorY + 3,
+        110,
+        40
+      );
+    }
+
+    const lower = getStairwayPoint(0, this.castleDoorAnchor);
+    const upper = getStairwayPoint(1, this.castleDoorAnchor);
+    const pathX = upper.x - lower.x;
+    const pathY = upper.y - lower.y;
+    const length = Math.hypot(pathX, pathY);
+    const normalX = -pathY / length;
+    const normalY = pathX / length;
+
+    for (let step = -1; step <= 13; step++) {
+      const progress = step / 12;
+      const point = getStairwayPoint(progress, this.castleDoorAnchor);
+      for (const side of [-1, 1]) {
+        this.addStaticCollision(
+          point.x + side * normalX * (ISO_STAIRWAY_HALF_WIDTH + 7),
+          point.y + side * normalY * (ISO_STAIRWAY_HALF_WIDTH + 7),
+          8,
+          10
+        );
       }
     }
   }
@@ -726,18 +1022,7 @@ class IsometricCourtyardScene extends Phaser.Scene {
 
     this.fountainBody = this.add.zone(x, y, width, height);
     this.physics.add.existing(this.fountainBody, true);
-
-    if (this.debugCollision) {
-      const { x: bodyX, y: bodyY, width: bodyWidth, height: bodyHeight } =
-        this.fountainBody.body;
-      const debug = this.add.graphics();
-      debug.fillStyle(0xff2020, 0.28);
-      debug.fillRect(bodyX, bodyY, bodyWidth, bodyHeight);
-      debug.lineStyle(2, 0xff3030, 1);
-      debug.strokeRect(bodyX, bodyY, bodyWidth, bodyHeight);
-      debug.setDepth(10000);
-      this.fountainCollisionDebug = debug;
-    }
+    this.fountainCollisionDebug = this.addCollisionDebug(this.fountainBody);
   }
 
   drawForegroundLayer() {
@@ -745,7 +1030,42 @@ class IsometricCourtyardScene extends Phaser.Scene {
   }
 
   update() {
+    if (this.transitioning || this.dialogueActive) return;
+
+    const entranceDistance = Phaser.Math.Distance.Between(
+      this.knight.x,
+      this.knight.y,
+      this.castleEntrance.x,
+      this.castleEntrance.y
+    );
+    const entranceNearby = entranceDistance < this.castleEntrance.radius;
+    this.interactionPrompt
+      .setText(entranceNearby ? 'Press E to enter the Royal Academy.' : '')
+      .setVisible(entranceNearby);
+
+    if (entranceNearby && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+      transitionTo(this, 'AcademyInterior', {
+        spawn: { x: 400, y: 375 },
+        returnScene: 'IsometricCourtyard',
+        returnSpawn: {
+          x: this.castleEntrance.x,
+          y: this.castleEntrance.y + 10
+        }
+      });
+      return;
+    }
+
     updateKnightMovement(this);
-    this.knight.setDepth(this.knight.body.bottom);
+    const stairwayPosition = getStairwayProgress(
+      this.knight.x,
+      this.knight.y,
+      this.castleDoorAnchor
+    );
+    const onStairway =
+      stairwayPosition.distance <= ISO_STAIRWAY_HALF_WIDTH + 12;
+    const depth = onStairway && this.staircaseSprite
+      ? Math.max(this.knight.body.bottom, this.staircaseSprite.depth + 1)
+      : this.knight.body.bottom;
+    this.knight.setDepth(depth);
   }
 }

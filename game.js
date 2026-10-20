@@ -317,6 +317,8 @@ class AcademyInteriorScene extends Phaser.Scene {
     createOmarAnimations(this);
     this.physics.world.setBounds(64, 0, 1152, 660);
     this.cameras.main.setBackgroundColor('#302a3b');
+    this.returnScene = data.returnScene || 'Academy';
+    this.returnSpawn = data.returnSpawn || courtyardPoint(400, 230);
 
     const art = this.add.graphics();
     art.fillStyle(0x665f6d);
@@ -489,7 +491,7 @@ class AcademyInteriorScene extends Phaser.Scene {
 
     if (Phaser.Input.Keyboard.JustDown(this.interactKey) &&
         exitDistance < 68 * ACADEMY_ROOM_SCALE) {
-      transitionTo(this, 'Academy', { spawn: courtyardPoint(400, 230) });
+      transitionTo(this, this.returnScene, { spawn: this.returnSpawn });
       return;
     }
 
@@ -526,6 +528,6 @@ new Phaser.Game({
     }
   },
   scene: launchIsometric
-    ? [IsometricCourtyardScene]
+    ? [IsometricCourtyardScene, AcademyInteriorScene]
     : [AcademyScene, AcademyInteriorScene]
 });
