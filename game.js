@@ -313,143 +313,200 @@ class AcademyScene extends Phaser.Scene {
 class AcademyInteriorScene extends Phaser.Scene {
   constructor() { super('AcademyInterior'); }
 
+  preload() {
+    this.load.image('interior-floor', 'assets/art/academy-cobblestone-tile.png');
+    this.load.image('interior-floor-inlay', 'assets/art/academy-cobblestone-inlay.png');
+    this.load.image('interior-window', 'assets/art/castle-modules/wall-window.png');
+    this.load.image('interior-stained-glass', 'assets/art/academy-stained-glass-wall.png');
+    this.load.image('interior-banner', 'assets/art/castle-modules/wall-banner.png');
+    this.load.image('interior-column', 'assets/art/castle-modules/wall-column.png');
+    this.load.image('interior-staircase', 'assets/art/castle-modules/grand-staircase.png');
+    this.load.image('interior-door', 'assets/art/castle-modules/entrance-double-doors.png');
+    this.load.image('interior-rose-urn', 'assets/art/rose-urn.png');
+  }
+
   create(data = {}) {
     createOmarAnimations(this);
-    this.physics.world.setBounds(64, 0, 1152, 660);
-    this.cameras.main.setBackgroundColor('#302a3b');
+    this.physics.world.setBounds(240, 20, 1280, 850);
+    this.cameras.main.setBackgroundColor('#20243a');
     this.returnScene = data.returnScene || 'Academy';
     this.returnSpawn = data.returnSpawn || courtyardPoint(400, 230);
-
-    const art = this.add.graphics();
-    art.fillStyle(0x665f6d);
-    art.fillRect(16, 16, 768, 448);
-    art.fillStyle(0x9b8b7d);
-    art.fillRect(40, 40, 720, 368);
-
-    art.lineStyle(1, 0x857568, 0.65);
-    for (let x = 40; x <= 760; x += 40) {
-      art.lineBetween(x, 40, x, 408);
-    }
-    for (let y = 40; y <= 408; y += 32) {
-      art.lineBetween(40, y, 760, y);
-    }
-
-    art.fillStyle(0x7b344b);
-    art.fillRect(340, 180, 120, 228);
-    art.fillStyle(0xc7a65f);
-    art.fillRect(346, 186, 108, 216);
-    art.fillStyle(0x7b344b);
-    art.fillRect(352, 192, 96, 210);
-    art.lineStyle(2, 0xe0c278, 0.9);
-    art.lineBetween(352, 200, 448, 200);
-    art.lineBetween(352, 394, 448, 394);
-
-    for (const x of [120, 680]) {
-      for (const y of [152, 304]) {
-        art.fillStyle(0x6d5961);
-        art.fillRect(x - 20, y - 22, 40, 44);
-        art.fillStyle(0xd2b98b);
-        art.fillRect(x - 15, y - 18, 30, 36);
-        art.fillStyle(0x6e4d60);
-        art.fillRect(x - 11, y - 13, 22, 26);
-      }
-    }
-
-    art.fillStyle(0x75677b);
-    art.fillRect(16, 16, 768, 24);
-    art.fillRect(16, 16, 24, 448);
-    art.fillRect(760, 16, 24, 448);
-    art.fillRect(16, 408, 352, 32);
-    art.fillRect(432, 408, 352, 32);
-
-    art.fillStyle(0x362a38);
-    art.fillRect(370, 390, 60, 42);
-    art.fillStyle(0xc08b5c);
-    art.fillRect(376, 394, 48, 34);
-    art.fillStyle(0x352a39);
-    art.fillRect(386, 400, 28, 28);
-    art.fillStyle(0xe3c272);
-    art.fillCircle(408, 414, 2);
-
-    art.fillStyle(0x51465b);
-    art.fillRect(292, 116, 216, 22);
-    art.fillStyle(0x847283);
-    art.fillRect(312, 96, 176, 20);
-    art.fillRect(332, 76, 136, 20);
-    art.fillRect(352, 56, 96, 20);
-    art.fillStyle(0xd5bb8b);
-    art.fillRect(292, 136, 216, 5);
-    art.fillRect(312, 116, 176, 4);
-    art.fillRect(332, 96, 136, 4);
-    art.fillRect(352, 76, 96, 4);
-
-    art.fillStyle(0x5b3f58);
-    art.fillRect(90, 54, 84, 50);
-    art.fillRect(626, 54, 84, 50);
-    art.fillStyle(0xd5bb8b);
-    art.fillRect(96, 60, 72, 38);
-    art.fillRect(632, 60, 72, 38);
-    art.fillStyle(0x8e5968);
-    art.fillRect(102, 66, 60, 26);
-    art.fillRect(638, 66, 60, 26);
-    art.fillStyle(0xf0d391);
-    art.fillCircle(132, 78, 6);
-    art.fillCircle(668, 78, 6);
-    art.setPosition(ACADEMY_ROOM_OFFSET_X, 0);
-    art.setScale(ACADEMY_ROOM_SCALE);
-
-    this.add.text(WIDTH / 2, 26, 'THE ROYAL ACADEMY', {
-      fontFamily: 'Georgia', fontSize: '20px', color: '#fff0d7'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(2);
+    this.drawInteriorFloor();
+    this.drawInteriorArchitecture();
 
     this.solidObstacles = this.physics.add.staticGroup();
-    const addObstacle = (x, y, width, height) => {
-      const position = academyRoomPoint(x, y);
-      const obstacle = this.add.rectangle(
-        position.x,
-        position.y,
-        width * ACADEMY_ROOM_SCALE,
-        height * ACADEMY_ROOM_SCALE
-      );
-      this.physics.add.existing(obstacle, true);
-      obstacle.setVisible(false);
-      this.solidObstacles.add(obstacle);
-    };
+    this.createInteriorCollisions();
 
-    addObstacle(400, 28, 768, 24);
-    addObstacle(28, 240, 24, 400);
-    addObstacle(772, 240, 24, 400);
-    addObstacle(192, 424, 352, 32);
-    addObstacle(608, 424, 352, 32);
-    for (const [x, y, width, height] of [
-      [400, 127, 216, 22],
-      [400, 106, 176, 20],
-      [400, 86, 136, 20],
-      [400, 66, 96, 20]
-    ]) {
-      addObstacle(x, y, width, height);
-    }
-    for (const x of [120, 680]) {
-      for (const y of [152, 304]) addObstacle(x, y, 30, 34);
-    }
-
+    const isometricEntrance = data.returnScene === 'IsometricCourtyard';
     const spawn = data.spawn || { x: 400, y: 375 };
-    const roomSpawn = academyRoomPoint(spawn.x, spawn.y);
-    this.knight = createKnight(this, roomSpawn.x, roomSpawn.y, ACADEMY_ROOM_SCALE);
+    const roomSpawn = isometricEntrance
+      ? { x: 736, y: 474 }
+      : academyRoomPoint(spawn.x, spawn.y);
+    this.interiorExit = { x: 736, y: 562, radius: 62 };
+    this.knight = createKnight(this, roomSpawn.x, roomSpawn.y);
     this.physics.add.collider(this.knight, this.solidObstacles);
-    this.actorDisplayScale = ACADEMY_ROOM_SCALE;
-    this.movementScale = ACADEMY_ROOM_SCALE;
+    this.knight.setDepth(this.knight.y);
+    this.actorDisplayScale = 1;
+    this.movementScale = 1;
     this.interactionPrompt = createInteractionPrompt(this);
     this.transitioning = false;
     this.dialogueActive = false;
     this.npcs = [];
     createNpc(this, {
       name: 'Rolando',
-      ...academyRoomPoint(560, 232),
+      x: 1024,
+      y: 492,
       spriteKey: createRolandoTexture(this),
       dialogue: rolandoDialogue
     });
+    this.add.text(WIDTH / 2, 24, 'THE GRAND ENTRANCE HALL', {
+      fontFamily: 'Georgia',
+      fontSize: '20px',
+      color: '#fff0d7',
+      backgroundColor: '#20243a',
+      padding: { x: 12, y: 6 }
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+    this.cameras.main.setBounds(240, 20, 1280, 850);
+    this.cameras.main.startFollow(this.knight, true, 0.08, 0.08);
     this.cameras.main.fadeIn(250, 0, 0, 0);
+  }
+
+  interiorTilePoint(tileX, tileY) {
+    return {
+      x: 800 + (tileX - tileY) * 32,
+      y: 150 + (tileX + tileY) * 16
+    };
+  }
+
+  drawInteriorFloor() {
+    const columns = 22;
+    const rows = 14;
+
+    for (let tileY = 0; tileY < rows; tileY++) {
+      for (let tileX = 0; tileX < columns; tileX++) {
+        const point = this.interiorTilePoint(tileX, tileY);
+        const tile = this.add.image(point.x, point.y, 'interior-floor')
+          .setOrigin(0.5, 0.5);
+        tile.setDepth(-1000 + (tileX + tileY) * 0.01);
+      }
+    }
+
+    const medallion = this.interiorTilePoint(11, 7);
+    this.add.image(medallion.x, medallion.y, 'interior-floor-inlay')
+      .setOrigin(0.5, 0.5)
+      .setDepth(-900);
+  }
+
+  drawInteriorArchitecture() {
+    const placeWall = (tileX, tileY, key, flipX = false, scale = 0.82) => {
+      const point = this.interiorTilePoint(tileX, tileY);
+      const wall = this.add.image(point.x, point.y + 8, key)
+        .setOrigin(0.5, 1)
+        .setScale(scale);
+      if (flipX) wall.setFlipX(true);
+      wall.setDepth(point.y);
+    };
+
+    for (let tileX = 1; tileX < 21; tileX += 4) {
+      placeWall(tileX, 0, 'interior-window', false, 0.8);
+    }
+    for (let tileY = 2; tileY < 13; tileY += 4) {
+      placeWall(0, tileY, 'interior-stained-glass', true, 0.92);
+      placeWall(21, tileY, 'interior-window', false, 0.8);
+    }
+    for (let tileX = 1; tileX < 10; tileX += 4) {
+      placeWall(tileX, 13, 'interior-banner', true, 0.78);
+    }
+    for (let tileX = 13; tileX < 21; tileX += 4) {
+      placeWall(tileX, 13, 'interior-banner', false, 0.78);
+    }
+
+    for (const [tileX, tileY, flipX] of [
+      [4, 1, false],
+      [17, 1, true],
+      [2, 7, true],
+      [19, 7, false]
+    ]) {
+      const point = this.interiorTilePoint(tileX, tileY);
+      const column = this.add.image(point.x, point.y + 6, 'interior-column')
+        .setOrigin(0.5, 1)
+        .setScale(0.72)
+        .setFlipX(flipX);
+      column.setDepth(point.y + 1);
+    }
+
+    const stairPoint = this.interiorTilePoint(11, 4);
+    const staircase = this.add.image(
+      stairPoint.x,
+      stairPoint.y + 54,
+      'interior-staircase'
+    )
+      .setOrigin(0.5, 1)
+      .setScale(0.78);
+    staircase.setDepth(staircase.y + 1);
+
+    const doorPoint = this.interiorTilePoint(11, 13);
+    const door = this.add.image(doorPoint.x, doorPoint.y + 20, 'interior-door')
+      .setOrigin(0.5, 1)
+      .setScale(0.72);
+    door.setDepth(door.y + 1);
+
+    for (const [tileX, tileY, flipX] of [
+      [3, 8, false],
+      [18, 8, true],
+      [5, 11, false],
+      [16, 11, true]
+    ]) {
+      const point = this.interiorTilePoint(tileX, tileY);
+      const urn = this.add.image(point.x, point.y, 'interior-rose-urn')
+        .setOrigin(0.5, 1)
+        .setScale(0.48)
+        .setFlipX(flipX);
+      urn.setDepth(urn.y + 1);
+    }
+  }
+
+  createInteriorCollisions() {
+    const addObstacle = (x, y, width, height, reason) => {
+      const obstacle = this.add.rectangle(x, y, width, height);
+      this.physics.add.existing(obstacle, true);
+      obstacle.setVisible(false);
+      obstacle.setData('blockReason', reason);
+      this.solidObstacles.add(obstacle);
+    };
+
+    for (let tile = 0; tile < 22; tile++) {
+      const north = this.interiorTilePoint(tile, 0);
+      const south = this.interiorTilePoint(tile, 13);
+      addObstacle(north.x, north.y + 14, 46, 18, 'north hall wall');
+      const doorway = tile >= 10 && tile <= 12;
+      if (!doorway) {
+        addObstacle(south.x, south.y + 14, 46, 18, 'south hall wall');
+      }
+    }
+    for (let tile = 1; tile < 13; tile++) {
+      const west = this.interiorTilePoint(0, tile);
+      const east = this.interiorTilePoint(21, tile);
+      addObstacle(west.x - 14, west.y, 18, 40, 'west hall wall');
+      addObstacle(east.x + 14, east.y, 18, 40, 'east hall wall');
+    }
+
+    const stairPoint = this.interiorTilePoint(11, 4);
+    addObstacle(
+      stairPoint.x,
+      stairPoint.y + 48,
+      150,
+      34,
+      'upper staircase',
+    );
+    for (const [tileX, tileY] of [[4, 1], [17, 1], [2, 7], [19, 7]]) {
+      const point = this.interiorTilePoint(tileX, tileY);
+      addObstacle(point.x, point.y - 4, 30, 22, 'stone column');
+    }
+    for (const [tileX, tileY] of [[3, 8], [18, 8], [5, 11], [16, 11]]) {
+      const point = this.interiorTilePoint(tileX, tileY);
+      addObstacle(point.x, point.y - 8, 28, 20, 'rose urn');
+    }
   }
 
   update() {
@@ -466,9 +523,21 @@ class AcademyInteriorScene extends Phaser.Scene {
     }
 
     const nearbyNpc = findNearbyNpc(this);
+    const exitDistance = Phaser.Math.Distance.Between(
+      this.knight.x,
+      this.knight.y,
+      this.interiorExit.x,
+      this.interiorExit.y
+    );
+    const nearExit = exitDistance < this.interiorExit.radius;
+    const prompt = nearbyNpc
+      ? `Press E to talk to ${nearbyNpc.name}.`
+      : nearExit
+        ? 'Press E to return to the courtyard.'
+        : '';
     this.interactionPrompt
-      .setText(nearbyNpc ? `Press E to talk to ${nearbyNpc.name}.` : '')
-      .setVisible(Boolean(nearbyNpc));
+      .setText(prompt)
+      .setVisible(Boolean(prompt));
 
     if (nearbyNpc && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       beginDialogue(this, nearbyNpc.dialogue);
@@ -478,24 +547,13 @@ class AcademyInteriorScene extends Phaser.Scene {
       return;
     }
 
-    const exit = academyRoomPoint(400, 416);
-    const exitDistance = Phaser.Math.Distance.Between(
-      this.knight.x,
-      this.knight.y,
-      exit.x,
-      exit.y
-    );
-    this.interactionPrompt
-      .setText('Press E to return to the courtyard.')
-      .setVisible(exitDistance < 68 * ACADEMY_ROOM_SCALE);
-
-    if (Phaser.Input.Keyboard.JustDown(this.interactKey) &&
-        exitDistance < 68 * ACADEMY_ROOM_SCALE) {
+    if (nearExit && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       transitionTo(this, this.returnScene, { spawn: this.returnSpawn });
       return;
     }
 
     updateKnightMovement(this);
+    this.knight.setDepth(this.knight.y);
   }
 }
 

@@ -653,6 +653,10 @@ class IsometricCourtyardScene extends Phaser.Scene {
 
   preload() {
     loadIsometricAssets(this);
+    this.load.image(
+      'iso-purple-butterfly',
+      'assets/art/purple-butterfly.png'
+    );
     this.load.svg('kauai', 'assets/kauai.svg', {
       width: 48,
       height: 64
@@ -684,6 +688,8 @@ class IsometricCourtyardScene extends Phaser.Scene {
     this.npcs = [];
     this.dialogueActive = false;
     this.transitioning = false;
+    this.reducedMotion = typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const debugParameters = new URLSearchParams(window.location.search);
     this.debugStairs =
@@ -750,6 +756,7 @@ class IsometricCourtyardScene extends Phaser.Scene {
     }
 
     this.drawForegroundLayer();
+    this.createGardenButterflies();
     if (this.debugStairs) {
       this.drawStairwayActorDebug();
       console.debug('[stairs] Sprite and navigation coordinates', {
@@ -1403,7 +1410,144 @@ class IsometricCourtyardScene extends Phaser.Scene {
     this.addManifestSprites('foreground', ISO_ASSET_MANIFEST.foreground);
   }
 
-  update() {
+  createGardenButterflies() {
+    const floralAssetPattern =
+      /rose-bush|ornamental-tree|flowering-tree|flowering-hedge|flowering-bush|flower-bed/;
+    const perches = ISO_ASSET_MANIFEST.decorations
+      .filter(asset => floralAssetPattern.test(asset.id))
+      .flatMap(asset => {
+        const sprite = this.manifestSprites.get(asset.id);
+        if (!sprite) {
+          throw new Error(`Missing butterfly garden perch: ${asset.id}`);
+        }
+
+        const horizontalSpread = Math.min(sprite.displayWidth * 0.2, 24);
+        const y = sprite.y - sprite.displayHeight * 0.62;
+        const garden = sprite.x < ISO_ORIGIN_X ? 'west' : 'east';
+        return [-1, 1].map(direction => ({
+          x: sprite.x + horizontalSpread * direction,
+          y,
+          garden
+        }));
+      });
+    const gardenPerches = {
+      west: perches.filter(perch => perch.garden === 'west'),
+      east: perches.filter(perch => perch.garden === 'east')
+    };
+    const butterflyCount = Math.min(
+      8,
+      gardenPerches.west.length + gardenPerches.east.length
+    );
+
+    this.gardenButterflies = Array.from(
+      { length: butterflyCount },
+      (_, index) => {
+        const garden = index % 2 === 0 ? 'west' : 'east';
+        const choices = gardenPerches[garden];
+        const perch = choices[Math.floor(Math.random() * choices.length)];
+        const scale = 0.38 + Math.random() * 0.08;
+        const sprite = this.add.image(
+          perch.x,
+          perch.y,
+          'iso-purple-butterfly'
+        ).setOrigin(0.5, 0.5).setScale(scale);
+        if (index % 3 === 0) sprite.setTint(0xfff0ff);
+        sprite.setDepth(perch.y + 1);
+
+        return {
+          sprite,
+          garden,
+          scale,
+          flapSpeed: 0.006 + Math.random() * 0.004,
+          flapPhase: Math.random() * Math.PI * 2,
+          state: 'landed',
+          elapsed: 0,
+          duration: 0,
+          idleDuration: 500 + Math.random() * 1800,
+          start: { x: perch.x, y: perch.y },
+          control: { x: perch.x, y: perch.y },
+          target: { x: perch.x, y: perch.y }
+        };
+      }
+    );
+    this.butterflyPerches = gardenPerches;
+  }
+
+  startGardenButterflyFlight(butterfly) {
+    const choices = this.butterflyPerches[butterfly.garden];
+    const nearbyPerches = choices.filter(perch => {
+      const distance = Phaser.Math.Distance.Between(
+        butterfly.sprite.x,
+        butterfly.sprite.y,
+        perch.x,
+        perch.y
+      );
+      return distance >= 28 && distance <= 185;
+    });
+    const target = nearbyPerches.length
+      ? nearbyPerches[Math.floor(Math.random() * nearbyPerches.length)]
+      : choices[Math.floor(Math.random() * choices.length)];
+    const start = { x: butterfly.sprite.x, y: butterfly.sprite.y };
+    const deltaX = target.x - start.x;
+    const deltaY = target.y - start.y;
+    const distance = Math.hypot(deltaX, deltaY) || 1;
+    const curve = (Math.random() - 0.5) * Math.min(distance * 0.45, 38);
+
+    butterfly.state = 'flying';
+    butterfly.elapsed = 0;
+    butterfly.duration = 1700 + Math.random() * 2200;
+    butterfly.start = start;
+    butterfly.target = { x: target.x, y: target.y };
+    butterfly.control = {
+      x: (start.x + target.x) / 2 - deltaY / distance * curve,
+      y: (start.y + target.y) / 2 + deltaX / distance * curve
+    };
+  }
+
+  updateGardenButterflies(time, delta) {
+    if (!this.gardenButterflies || this.reducedMotion) return;
+
+    for (const butterfly of this.gardenButterflies) {
+      if (butterfly.state === 'landed') {
+        butterfly.idleDuration -= delta;
+        butterfly.sprite.setScale(butterfly.scale, butterfly.scale * 0.58);
+        if (butterfly.idleDuration <= 0) {
+          this.startGardenButterflyFlight(butterfly);
+        }
+      } else {
+        butterfly.elapsed += delta;
+        const progress = Math.min(
+          butterfly.elapsed / butterfly.duration,
+          1
+        );
+        const inverseProgress = 1 - progress;
+        const { start, control, target } = butterfly;
+        butterfly.sprite.setPosition(
+          inverseProgress ** 2 * start.x +
+            2 * inverseProgress * progress * control.x +
+            progress ** 2 * target.x,
+          inverseProgress ** 2 * start.y +
+            2 * inverseProgress * progress * control.y +
+            progress ** 2 * target.y
+        );
+        const flap = 0.48 + 0.52 *
+          Math.abs(Math.sin(time * butterfly.flapSpeed + butterfly.flapPhase));
+        butterfly.sprite.setScale(butterfly.scale, butterfly.scale * flap);
+
+        if (progress >= 1) {
+          butterfly.state = 'landed';
+          butterfly.idleDuration = 900 + Math.random() * 2800;
+          if (Math.random() < 0.32) {
+            this.startGardenButterflyFlight(butterfly);
+          }
+        }
+      }
+      butterfly.sprite.setDepth(butterfly.sprite.y + 1);
+    }
+  }
+
+  update(time, delta) {
+    this.updateGardenButterflies(time, delta);
     if (this.transitioning || this.dialogueActive) return;
 
     const actorGroundPoint = {
