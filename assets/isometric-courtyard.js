@@ -3,18 +3,44 @@ const ISO_TILE_HEIGHT = 32;
 
 const ISO_MAP_COLUMNS = 40;
 const ISO_MAP_ROWS = 28;
+const ISO_TERRAIN_MARGIN = 8;
+const ISO_TERRAIN_MIN_X = -ISO_TERRAIN_MARGIN;
+const ISO_TERRAIN_MIN_Y = -ISO_TERRAIN_MARGIN;
+const ISO_TERRAIN_MAX_X = ISO_MAP_COLUMNS + ISO_TERRAIN_MARGIN - 1;
+const ISO_TERRAIN_MAX_Y = ISO_MAP_ROWS + ISO_TERRAIN_MARGIN - 1;
+const ISO_TERRAIN_HORIZON_TILE_SUM = 14;
 const ISO_ORIGIN_X = ISO_MAP_ROWS * ISO_TILE_WIDTH / 2 + 32;
 const ISO_ORIGIN_Y = 120;
-const ISO_WORLD_WIDTH = ISO_ORIGIN_X + ISO_MAP_COLUMNS * ISO_TILE_WIDTH / 2 + 32;
-const ISO_WORLD_HEIGHT =
-  ISO_ORIGIN_Y + (ISO_MAP_COLUMNS + ISO_MAP_ROWS) * ISO_TILE_HEIGHT / 2 + 32;
+const ISO_WORLD_MIN_X = ISO_ORIGIN_X +
+  (ISO_TERRAIN_MIN_X - ISO_TERRAIN_MAX_Y) * ISO_TILE_WIDTH / 2 -
+  ISO_TILE_WIDTH / 2;
+const ISO_WORLD_MAX_X = ISO_ORIGIN_X +
+  (ISO_TERRAIN_MAX_X - ISO_TERRAIN_MIN_Y) * ISO_TILE_WIDTH / 2 +
+  ISO_TILE_WIDTH / 2;
+const ISO_WORLD_MIN_Y = ISO_ORIGIN_Y +
+  (ISO_TERRAIN_MIN_X + ISO_TERRAIN_MIN_Y) * ISO_TILE_HEIGHT / 2 -
+  ISO_TILE_HEIGHT / 2;
+const ISO_WORLD_MAX_Y = ISO_ORIGIN_Y +
+  (ISO_TERRAIN_MAX_X + ISO_TERRAIN_MAX_Y) * ISO_TILE_HEIGHT / 2 +
+  ISO_TILE_HEIGHT / 2;
+const ISO_WORLD_BOUNDS = {
+  x: ISO_WORLD_MIN_X,
+  y: ISO_WORLD_MIN_Y,
+  width: ISO_WORLD_MAX_X - ISO_WORLD_MIN_X,
+  height: ISO_WORLD_MAX_Y - ISO_WORLD_MIN_Y
+};
 const ISO_FOUNTAIN_TILE = { x: 14, y: 12 };
 const ISO_PLAYER_SPAWN_TILE = { x: 9, y: 15 };
 const ISO_CASTLE_ENTRANCE_TILE = { x: 10, y: 8 };
-const ISO_STAIRWAY_LOWER_OFFSET_Y = 58;
-const ISO_STAIRWAY_UPPER_OFFSET_Y = 18;
-const ISO_STAIRWAY_UPPER_OFFSET_X = -12;
 const ISO_STAIRWAY_HALF_WIDTH = 25;
+const ISO_STAIRWAY_APPROACH_PROGRESS = -0.12;
+const ISO_STAIRWAY_EXIT_PROGRESS = 1.08;
+const ISO_STAIRWAY_RAIL_OFFSET = 47;
+const ISO_STAIRWAY_ART_PATH = [
+  { progress: 0, x: 108, y: 214 },
+  { progress: 0.5, x: 106, y: 130 },
+  { progress: 1, x: 104, y: 46 }
+];
 const ISO_PATH_SEGMENTS = [
   [{ x: 8, y: 6 }, { x: 12, y: 10 }],
   [{ x: 12, y: 10 }, { x: 11, y: 11 }],
@@ -59,32 +85,120 @@ function isIsoPavedTile(tileX, tileY) {
   return pathDistance <= 0.8 || isFountainPlaza;
 }
 
-function getStairwayPoint(progress, doorAnchor) {
+function getStairwayPoint(progress, staircaseSprite) {
+  let segmentIndex = ISO_STAIRWAY_ART_PATH.findIndex(
+    (point, index) =>
+      index < ISO_STAIRWAY_ART_PATH.length - 1 &&
+      progress <= ISO_STAIRWAY_ART_PATH[index + 1].progress
+  );
+  if (segmentIndex < 0) segmentIndex = ISO_STAIRWAY_ART_PATH.length - 2;
+
+  const start = ISO_STAIRWAY_ART_PATH[segmentIndex];
+  const end = ISO_STAIRWAY_ART_PATH[segmentIndex + 1];
+  const segmentProgress = (progress - start.progress) /
+    (end.progress - start.progress);
+  const imageX = start.x + (end.x - start.x) * segmentProgress;
+  const imageY = start.y + (end.y - start.y) * segmentProgress;
+
   return {
-    x: doorAnchor.x + ISO_STAIRWAY_UPPER_OFFSET_X * progress,
-    y: doorAnchor.y + ISO_STAIRWAY_LOWER_OFFSET_Y +
-      (ISO_STAIRWAY_UPPER_OFFSET_Y - ISO_STAIRWAY_LOWER_OFFSET_Y) * progress
+    x: staircaseSprite.x - staircaseSprite.displayWidth * staircaseSprite.originX +
+      imageX * Math.abs(staircaseSprite.scaleX),
+    y: staircaseSprite.y - staircaseSprite.displayHeight * staircaseSprite.originY +
+      imageY * Math.abs(staircaseSprite.scaleY)
   };
 }
 
-function getStairwayProgress(worldX, worldY, doorAnchor) {
-  const lower = getStairwayPoint(0, doorAnchor);
-  const upper = getStairwayPoint(1, doorAnchor);
-  const pathX = upper.x - lower.x;
-  const pathY = upper.y - lower.y;
-  const lengthSquared = pathX ** 2 + pathY ** 2;
-  const progress = Phaser.Math.Clamp(
-    ((worldX - lower.x) * pathX + (worldY - lower.y) * pathY) /
-      lengthSquared,
-    0,
-    1
+function getStairwayProgress(worldX, worldY, staircaseSprite) {
+  const pathBreaks = [
+    ISO_STAIRWAY_APPROACH_PROGRESS,
+    ...ISO_STAIRWAY_ART_PATH.map(({ progress }) => progress),
+    ISO_STAIRWAY_EXIT_PROGRESS
+  ];
+  let progress = pathBreaks[0];
+  let point = getStairwayPoint(progress, staircaseSprite);
+  let distanceSquared = Infinity;
+
+  for (let index = 0; index < pathBreaks.length - 1; index++) {
+    const startProgress = pathBreaks[index];
+    const endProgress = pathBreaks[index + 1];
+    const start = getStairwayPoint(startProgress, staircaseSprite);
+    const end = getStairwayPoint(endProgress, staircaseSprite);
+    const segmentX = end.x - start.x;
+    const segmentY = end.y - start.y;
+    const segmentLengthSquared = segmentX ** 2 + segmentY ** 2;
+    const projection = Phaser.Math.Clamp(
+      ((worldX - start.x) * segmentX + (worldY - start.y) * segmentY) /
+        segmentLengthSquared,
+      0,
+      1
+    );
+    const candidateProgress = startProgress +
+      (endProgress - startProgress) * projection;
+    const candidate = getStairwayPoint(candidateProgress, staircaseSprite);
+    const candidateDistanceSquared =
+      (worldX - candidate.x) ** 2 + (worldY - candidate.y) ** 2;
+    if (candidateDistanceSquared >= distanceSquared) continue;
+    progress = candidateProgress;
+    point = candidate;
+    distanceSquared = candidateDistanceSquared;
+  }
+
+  const before = getStairwayPoint(
+    Math.max(ISO_STAIRWAY_APPROACH_PROGRESS, progress - 0.01),
+    staircaseSprite
   );
-  const point = getStairwayPoint(progress, doorAnchor);
+  const after = getStairwayPoint(
+    Math.min(ISO_STAIRWAY_EXIT_PROGRESS, progress + 0.01),
+    staircaseSprite
+  );
+  const directionX = after.x - before.x;
+  const directionY = after.y - before.y;
+  const directionLength = Math.hypot(directionX, directionY);
 
   return {
     progress,
-    distance: Phaser.Math.Distance.Between(worldX, worldY, point.x, point.y)
+    distance: Math.sqrt(distanceSquared),
+    point,
+    direction: {
+      x: directionX / directionLength,
+      y: directionY / directionLength
+    }
   };
+}
+
+function castlePair({
+  id,
+  key,
+  path,
+  rightKey = key,
+  rightPath = path,
+  offsetX,
+  offsetY = 0,
+  scale = 1,
+  depthOffset = 0,
+  flipRight = true
+}) {
+  const left = {
+    id: `${id}-left`,
+    key,
+    path,
+    offsetX: -offsetX,
+    offsetY,
+    scale,
+    depthOffset
+  };
+  const right = {
+    id: `${id}-right`,
+    key: rightKey,
+    path: rightPath,
+    offsetX,
+    offsetY,
+    scale,
+    depthOffset
+  };
+  if (flipRight) right.flipX = true;
+
+  return [left, right];
 }
 
 const ISO_ASSET_MANIFEST = {
@@ -97,216 +211,97 @@ const ISO_ASSET_MANIFEST = {
   }],
   buildings: [],
   castle: [
+    ...[-472, -354, -236, -118, 0, 118, 236, 354, 472].map(
+      (offsetX, index) => ({
+        id: `castle-rear-wall-${index + 1}`,
+        key: 'castle-wall-straight',
+        path: 'assets/art/castle-modules/wall-straight.png',
+        offsetX,
+        offsetY: -42,
+        scale: 1,
+        depthOffset: -1000,
+        flipX: index % 2 === 1
+      })
+    ),
     {
       id: 'castle-roof-center',
       key: 'castle-roof-central',
       path: 'assets/art/castle-modules/roof-central-large.png',
       offsetX: 0,
-      offsetY: -200,
+      offsetY: -140,
       scale: 1.1
     },
-    {
-      id: 'castle-roof-left-inner',
+    ...castlePair({
+      id: 'castle-roof-inner',
       key: 'castle-roof-corner-left',
       path: 'assets/art/castle-modules/roof-corner-left.png',
-      offsetX: -150,
-      offsetY: -200,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-right-inner',
-      key: 'castle-roof-corner-right',
-      path: 'assets/art/castle-modules/roof-corner-right.png',
+      rightKey: 'castle-roof-corner-right',
+      rightPath: 'assets/art/castle-modules/roof-corner-right.png',
       offsetX: 150,
-      offsetY: -200,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-left-wing',
+      offsetY: -140,
+      flipRight: false
+    }),
+    ...[260, 375, 490].flatMap((offsetX, index) => castlePair({
+      id: `castle-roof-wing-${index + 1}`,
       key: 'castle-roof-straight',
       path: 'assets/art/castle-modules/roof-straight.png',
-      offsetX: -260,
-      offsetY: -198,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-right-wing',
-      key: 'castle-roof-straight',
-      path: 'assets/art/castle-modules/roof-straight.png',
-      offsetX: 260,
-      offsetY: -198,
-      flipX: true,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-left-middle',
-      key: 'castle-roof-straight',
-      path: 'assets/art/castle-modules/roof-straight.png',
-      offsetX: -375,
-      offsetY: -198,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-right-middle',
-      key: 'castle-roof-straight',
-      path: 'assets/art/castle-modules/roof-straight.png',
-      offsetX: 375,
-      offsetY: -198,
-      flipX: true,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-left-outer',
-      key: 'castle-roof-straight',
-      path: 'assets/art/castle-modules/roof-straight.png',
-      offsetX: -490,
-      offsetY: -198,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-right-outer',
-      key: 'castle-roof-straight',
-      path: 'assets/art/castle-modules/roof-straight.png',
-      offsetX: 490,
-      offsetY: -198,
-      flipX: true,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-left-end',
-      key: 'castle-roof-end',
-      path: 'assets/art/castle-modules/roof-end.png',
-      offsetX: -590,
-      offsetY: -198,
-      scale: 1
-    },
-    {
-      id: 'castle-roof-right-end',
+      offsetX,
+      offsetY: -138
+    })),
+    ...castlePair({
+      id: 'castle-roof-end',
       key: 'castle-roof-end',
       path: 'assets/art/castle-modules/roof-end.png',
       offsetX: 590,
-      offsetY: -198,
-      flipX: true,
-      scale: 1
-    },
-    {
-      id: 'castle-wall-left-inner',
+      offsetY: -138
+    }),
+    ...castlePair({
+      id: 'castle-wall-inner',
       key: 'castle-wall-straight',
       path: 'assets/art/castle-modules/wall-straight.png',
-      offsetX: -160,
-      offsetY: 0,
-      scale: 1
-    },
-    {
-      id: 'castle-wall-right-inner',
-      key: 'castle-wall-straight',
-      path: 'assets/art/castle-modules/wall-straight.png',
-      offsetX: 160,
-      offsetY: 0,
-      flipX: true,
-      scale: 1
-    },
-    {
-      id: 'castle-column-left',
-      key: 'castle-wall-column',
-      path: 'assets/art/castle-modules/wall-column.png',
-      offsetX: -112,
-      offsetY: 0,
-      scale: 0.9
-    },
-    {
-      id: 'castle-column-right',
+      offsetX: 160
+    }),
+    ...castlePair({
+      id: 'castle-entrance-column',
       key: 'castle-wall-column',
       path: 'assets/art/castle-modules/wall-column.png',
       offsetX: 112,
-      offsetY: 0,
-      flipX: true,
       scale: 0.9
-    },
-    {
-      id: 'castle-wall-left-window',
+    }),
+    ...castlePair({
+      id: 'castle-window',
       key: 'castle-wall-window',
       path: 'assets/art/castle-modules/wall-window.png',
-      offsetX: -260,
-      offsetY: 0,
-      scale: 1
-    },
-    {
-      id: 'castle-wall-right-window',
-      key: 'castle-wall-window',
-      path: 'assets/art/castle-modules/wall-window.png',
-      offsetX: 260,
-      offsetY: 0,
-      flipX: true,
-      scale: 1
-    },
-    {
-      id: 'castle-wall-left-banner',
+      offsetX: 260
+    }),
+    ...castlePair({
+      id: 'castle-banner',
       key: 'castle-wall-banner',
       path: 'assets/art/castle-modules/wall-banner.png',
-      offsetX: -355,
-      offsetY: 0,
-      scale: 1
-    },
-    {
-      id: 'castle-wall-right-banner',
-      key: 'castle-wall-banner',
-      path: 'assets/art/castle-modules/wall-banner.png',
-      offsetX: 355,
-      offsetY: 0,
-      flipX: true,
-      scale: 1
-    },
-    {
-      id: 'castle-wall-left-wing',
+      offsetX: 355
+    }),
+    ...castlePair({
+      id: 'castle-wing-wall',
       key: 'castle-wall-long',
       path: 'assets/art/castle-modules/wall-long.png',
-      offsetX: -470,
-      offsetY: 0,
-      scale: 1
-    },
-    {
-      id: 'castle-wall-right-wing',
-      key: 'castle-wall-long',
-      path: 'assets/art/castle-modules/wall-long.png',
-      offsetX: 470,
-      offsetY: 0,
-      flipX: true,
-      scale: 1
-    },
-    {
-      id: 'castle-inner-tower-left',
-      key: 'castle-tower-tall-spire',
-      path: 'assets/art/castle-modules/tower-tall-spire.png',
-      offsetX: -385,
-      offsetY: -14,
-      scale: 1.05
-    },
-    {
-      id: 'castle-inner-tower-right',
+      offsetX: 470
+    }),
+    ...castlePair({
+      id: 'castle-inner-tower',
       key: 'castle-tower-tall-spire',
       path: 'assets/art/castle-modules/tower-tall-spire.png',
       offsetX: 385,
       offsetY: -14,
       scale: 1.05
-    },
-    {
-      id: 'castle-outer-tower-left',
-      key: 'castle-tower-round',
-      path: 'assets/art/castle-modules/tower-round.png',
-      offsetX: -600,
-      offsetY: 10,
-      scale: 1.12
-    },
-    {
-      id: 'castle-outer-tower-right',
+    }),
+    ...castlePair({
+      id: 'castle-outer-tower',
       key: 'castle-tower-round',
       path: 'assets/art/castle-modules/tower-round.png',
       offsetX: 600,
       offsetY: 10,
-      flipX: true,
       scale: 1.12
-    },
+    }),
     {
       id: 'castle-entrance',
       key: 'castle-double-doors',
@@ -662,12 +657,18 @@ class IsometricCourtyardScene extends Phaser.Scene {
       width: 48,
       height: 64
     });
+
   }
 
   create(data = {}) {
     createOmarAnimations(this);
-    this.cameras.main.setBackgroundColor('#557653');
-    this.physics.world.setBounds(0, 0, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
+    this.cameras.main.setBackgroundColor('#68b8f5');
+    this.physics.world.setBounds(
+      ISO_WORLD_BOUNDS.x,
+      ISO_WORLD_BOUNDS.y,
+      ISO_WORLD_BOUNDS.width,
+      ISO_WORLD_BOUNDS.height
+    );
 
     this.renderLayers = {
       ground: [],
@@ -684,22 +685,30 @@ class IsometricCourtyardScene extends Phaser.Scene {
     this.dialogueActive = false;
     this.transitioning = false;
 
+    const debugParameters = new URLSearchParams(window.location.search);
+    this.debugStairs =
+      debugParameters.get('scene') === 'isometric' &&
+      debugParameters.get('debugStairs') === '1';
     this.debugCollision =
-      new URLSearchParams(window.location.search).get('debugCollision') === '1';
+      debugParameters.get('debugCollision') === '1' || this.debugStairs;
+    this.lastMovementBlockLog = new Map();
+    this.movementIntent = { x: 0, y: 0 };
+    this.stairwayRegion = 'courtyard';
     this.fountainAsset = ISO_ASSET_MANIFEST.fountain[0];
     const entrance = isoTileToWorld(
       ISO_CASTLE_ENTRANCE_TILE.x,
       ISO_CASTLE_ENTRANCE_TILE.y
     );
     this.castleDoorAnchor = entrance;
-    this.castleEntrance = {
-      x: entrance.x,
-      y: entrance.y + ISO_STAIRWAY_UPPER_OFFSET_Y,
-      radius: 20
-    };
-
+    this.drawParallaxBackdrop();
     this.drawGroundLayer();
     this.drawStructureLayer();
+    const upperLanding = getStairwayPoint(1, this.staircaseSprite);
+    this.castleEntrance = {
+      x: upperLanding.x,
+      y: upperLanding.y,
+      radius: 20
+    };
     this.drawFountain(ISO_FOUNTAIN_TILE);
 
     const spawn = data.spawn || isoTileToWorld(
@@ -708,11 +717,30 @@ class IsometricCourtyardScene extends Phaser.Scene {
     );
     this.knight = createKnight(this, spawn.x, spawn.y);
     this.knight.setCollideWorldBounds(true);
+    const spawnStairwayPosition = getStairwayProgress(
+      this.knight.body.center.x,
+      this.knight.body.bottom,
+      this.staircaseSprite
+    );
+    if (spawnStairwayPosition.distance <= ISO_STAIRWAY_HALF_WIDTH + 12) {
+      this.knight.setDepth(
+        Math.max(
+          this.knight.body.bottom,
+          this.staircaseSprite.depth + 1
+        )
+      );
+      this.stairwayRegion = spawnStairwayPosition.progress >= 1
+        ? 'upper-landing'
+        : spawnStairwayPosition.progress < 0
+          ? 'lower-approach'
+          : 'stair-run';
+    }
     this.renderLayers.characters.push(this.knight);
     this.createCollisionLayer();
     this.fountainCollider = this.physics.add.collider(
       this.knight,
-      this.fountainBody
+      this.fountainBody,
+      (actor, blocker) => this.logMovementRejected(actor, blocker)
     );
     this.createStaticCollisionLayer();
     this.interactionPrompt = createInteractionPrompt(this);
@@ -722,6 +750,25 @@ class IsometricCourtyardScene extends Phaser.Scene {
     }
 
     this.drawForegroundLayer();
+    if (this.debugStairs) {
+      this.drawStairwayActorDebug();
+      console.debug('[stairs] Sprite and navigation coordinates', {
+        sprite: {
+          x: this.staircaseSprite.x,
+          y: this.staircaseSprite.y,
+          originX: this.staircaseSprite.originX,
+          originY: this.staircaseSprite.originY,
+          displayWidth: this.staircaseSprite.displayWidth,
+          displayHeight: this.staircaseSprite.displayHeight,
+          depth: this.staircaseSprite.depth
+        },
+        lowerStep: getStairwayPoint(0, this.staircaseSprite),
+        upperLanding: upperLanding,
+        entranceTile: ISO_CASTLE_ENTRANCE_TILE,
+        entranceWorld: entrance,
+        entranceTileRoundTrip: isoWorldToTile(entrance.x, entrance.y)
+      });
+    }
     this.add.text(16, 52, 'EXPERIMENTAL ISOMETRIC COURTYARD  |  WASD / ARROWS', {
       fontFamily: 'Georgia',
       fontSize: '14px',
@@ -730,7 +777,12 @@ class IsometricCourtyardScene extends Phaser.Scene {
       padding: { x: 8, y: 5 }
     }).setScrollFactor(0).setDepth(10000);
 
-    this.cameras.main.setBounds(0, 0, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
+    this.cameras.main.setBounds(
+      ISO_WORLD_BOUNDS.x,
+      ISO_WORLD_BOUNDS.y,
+      ISO_WORLD_BOUNDS.width,
+      ISO_WORLD_BOUNDS.height
+    );
     this.cameras.main.centerOn(this.knight.x, this.knight.y);
     this.cameras.main.startFollow(this.knight, true, 0.08, 0.08);
     this.cameras.main.setRoundPixels(true);
@@ -741,6 +793,123 @@ class IsometricCourtyardScene extends Phaser.Scene {
     gameObject.setDepth(depth);
     this.renderLayers[layer].push(gameObject);
     return gameObject;
+  }
+
+  drawParallaxBackdrop() {
+    const mountainHaze = this.add.graphics();
+    mountainHaze.fillStyle(0xc5e5f7, 0.56);
+    mountainHaze.fillPoints([
+      { x: -300, y: 335 },
+      { x: 80, y: 180 },
+      { x: 260, y: 285 },
+      { x: 510, y: 155 },
+      { x: 760, y: 300 },
+      { x: 1030, y: 175 },
+      { x: 1270, y: 310 },
+      { x: 1540, y: 165 },
+      { x: 1800, y: 295 },
+      { x: 2070, y: 185 },
+      { x: 2490, y: 340 },
+      { x: 2490, y: 430 },
+      { x: -300, y: 430 }
+    ], true);
+    mountainHaze.setScrollFactor(0.025, 0).setDepth(-2000);
+
+    const mountains = this.add.graphics();
+    mountains.fillStyle(0x6e9cbd, 0.62);
+    mountains.fillPoints([
+      { x: -300, y: 405 },
+      { x: 20, y: 270 },
+      { x: 185, y: 345 },
+      { x: 380, y: 205 },
+      { x: 560, y: 355 },
+      { x: 805, y: 225 },
+      { x: 1010, y: 358 },
+      { x: 1240, y: 215 },
+      { x: 1460, y: 355 },
+      { x: 1695, y: 230 },
+      { x: 1910, y: 372 },
+      { x: 2160, y: 225 },
+      { x: 2490, y: 410 },
+      { x: 2490, y: 440 },
+      { x: -300, y: 440 }
+    ], true);
+    mountains.fillStyle(0x91b5ca, 0.55);
+    for (const peak of [
+      { x: 20, y: 270, w: 92, h: 68 },
+      { x: 380, y: 205, w: 112, h: 82 },
+      { x: 805, y: 225, w: 100, h: 76 },
+      { x: 1240, y: 215, w: 108, h: 82 },
+      { x: 1695, y: 230, w: 116, h: 86 },
+      { x: 2160, y: 225, w: 100, h: 78 }
+    ]) {
+      mountains.fillPoints([
+        { x: peak.x - peak.w / 2, y: peak.y + peak.h },
+        { x: peak.x, y: peak.y },
+        { x: peak.x + peak.w / 2, y: peak.y + peak.h }
+      ], true);
+    }
+    mountains.setScrollFactor(0.045, 0).setDepth(-1999);
+
+    const forest = this.add.graphics();
+    forest.fillStyle(0x426f6c, 0.72);
+    for (let x = -180; x < ISO_WORLD_MAX_X + 320; x += 48) {
+      const height = 42 + ((Math.floor((x + 180) / 48) * 17) % 31);
+      forest.fillPoints([
+        { x, y: 390 },
+        { x: x + 20, y: 390 - height },
+        { x: x + 40, y: 390 }
+      ], true);
+      forest.fillRect(x + 17, 381 - height * 0.35, 6, height * 0.35 + 12);
+    }
+    forest.setScrollFactor(0.08, 0).setDepth(-1998);
+
+    const sunlight = this.add.graphics();
+    sunlight.fillStyle(0xffe7a5, 0.12);
+    sunlight.fillCircle(130, 75, 185);
+    sunlight.fillStyle(0xfff1c9, 0.22);
+    sunlight.fillCircle(130, 75, 82);
+    sunlight.fillStyle(0xffe7a5, 0.045);
+    for (const ray of [
+      [{ x: 80, y: 70 }, { x: 315, y: 500 }, { x: 405, y: 500 }],
+      [{ x: 115, y: 55 }, { x: 690, y: 430 }, { x: 790, y: 430 }],
+      [{ x: 145, y: 50 }, { x: 1050, y: 345 }, { x: 1160, y: 345 }]
+    ]) {
+      sunlight.fillPoints(ray, true);
+    }
+    sunlight.setScrollFactor(0).setDepth(-1997);
+
+    const clouds = this.add.graphics();
+    for (const cloud of [
+      { x: 190, y: 138, scale: 0.72 },
+      { x: 480, y: 78, scale: 0.52 },
+      { x: 790, y: 155, scale: 0.88 },
+      { x: 1120, y: 96, scale: 0.64 },
+      { x: 1450, y: 158, scale: 0.76 },
+      { x: 1780, y: 82, scale: 0.56 },
+      { x: 2110, y: 145, scale: 0.92 }
+    ]) {
+      const { x, y, scale } = cloud;
+      clouds.fillStyle(0x8db7d4, 0.12);
+      clouds.fillEllipse(x, y + 13 * scale, 190 * scale, 44 * scale);
+      clouds.fillStyle(0xffffff, 0.76);
+      clouds.fillCircle(x - 42 * scale, y, 27 * scale);
+      clouds.fillCircle(x - 12 * scale, y - 13 * scale, 36 * scale);
+      clouds.fillCircle(x + 28 * scale, y - 7 * scale, 32 * scale);
+      clouds.fillCircle(x + 54 * scale, y + 4 * scale, 22 * scale);
+      clouds.fillEllipse(x + 5 * scale, y + 10 * scale, 118 * scale, 25 * scale);
+      clouds.fillStyle(0xffffff, 0.38);
+      clouds.fillCircle(x - 24 * scale, y - 18 * scale, 14 * scale);
+    }
+    clouds.setScrollFactor(0).setDepth(-1996);
+  }
+
+  addSoftShadow(x, y, width, depth, alpha = 0.14) {
+    const shadow = this.add.graphics();
+    shadow.fillStyle(0x263b45, alpha);
+    shadow.fillEllipse(x, y, width, Math.max(7, width * 0.12));
+    shadow.setDepth(depth);
+    return shadow;
   }
 
   addIsometricSprite(layer, textureKey, tileX, tileY, options = {}) {
@@ -759,21 +928,27 @@ class IsometricCourtyardScene extends Phaser.Scene {
     if (!this.debugCollision) return null;
 
     const { x, y, width, height } = body.body;
+    const reason = body.getData('blockReason');
     const debug = this.add.graphics();
-    debug.fillStyle(0xff2020, 0.28);
+    debug.fillStyle(reason === 'staircase railing' ? 0xff4c4c : 0xff2020, 0.32);
     debug.fillRect(x, y, width, height);
-    debug.lineStyle(2, 0xff3030, 1);
+    debug.lineStyle(2, reason === 'staircase railing' ? 0xffe070 : 0xff3030, 1);
     debug.strokeRect(x, y, width, height);
     debug.setDepth(10000);
     this.collisionDebugObjects.push(debug);
     return debug;
   }
 
-  addStaticCollision(x, y, width, height) {
+  addStaticCollision(x, y, width, height, reason = 'solid obstacle') {
     const body = this.add.zone(x, y, width, height);
+    body.setData('blockReason', reason);
     this.physics.add.existing(body, true);
     this.staticCollisionBodies.push(body);
-    this.staticColliders.push(this.physics.add.collider(this.knight, body));
+    this.staticColliders.push(this.physics.add.collider(
+      this.knight,
+      body,
+      (actor, blocker) => this.logMovementRejected(actor, blocker)
+    ));
 
     const debug = this.addCollisionDebug(body);
     if (debug) this.staticCollisionDebug.push(debug);
@@ -786,12 +961,28 @@ class IsometricCourtyardScene extends Phaser.Scene {
     const grassAsset = ISO_ASSET_MANIFEST.ground[1];
     const pathColor = 0xa99e8d;
     const grassColor = 0x5b7d56;
+    const grassTints = [
+      0xffffff,
+      0xf3f8df,
+      0xe7f0d1,
+      0xf8efd5
+    ];
 
-    for (let tileY = 0; tileY < ISO_MAP_ROWS; tileY++) {
-      for (let tileX = 0; tileX < ISO_MAP_COLUMNS; tileX++) {
+    for (let tileY = ISO_TERRAIN_MIN_Y;
+      tileY <= ISO_TERRAIN_MAX_Y;
+      tileY++) {
+      for (let tileX = ISO_TERRAIN_MIN_X;
+        tileX <= ISO_TERRAIN_MAX_X;
+        tileX++) {
         const center = isoTileToWorld(tileX, tileY);
         const isPath = isIsoPavedTile(tileX, tileY);
+        if (tileX + tileY < ISO_TERRAIN_HORIZON_TILE_SUM && !isPath) {
+          continue;
+        }
         const color = isPath ? pathColor : grassColor;
+        const variation = Math.abs(
+          Math.sin(tileX * 127.1 + tileY * 311.7) * 43758.5453
+        ) % 1;
         const points = [
           { x: center.x, y: center.y - ISO_TILE_HEIGHT / 2 },
           { x: center.x + ISO_TILE_WIDTH / 2, y: center.y },
@@ -803,7 +994,8 @@ class IsometricCourtyardScene extends Phaser.Scene {
         ground.fillPoints(points, true);
         const grass = this.add.image(center.x, center.y, grassAsset.key)
           .setOrigin(0.5)
-          .setScale(0.78);
+          .setScale(0.84)
+          .setTint(grassTints[Math.floor(variation * grassTints.length)]);
         this.addLayerObject(
           'ground',
           grass,
@@ -821,12 +1013,47 @@ class IsometricCourtyardScene extends Phaser.Scene {
             center.y,
             pavingAsset.key
           ).setOrigin(0.5).setScale(1);
-          this.addLayerObject('ground', paving, -900);
+          this.addLayerObject(
+            'ground',
+            paving,
+            -900 + (tileX + tileY) * 0.01
+          );
         }
       }
     }
 
     this.addLayerObject('ground', ground, -1100);
+    this.addWildflowerPatches();
+  }
+
+  addWildflowerPatches() {
+    const floweringBushKey = 'iso-flowering-bush';
+
+    for (let tileY = ISO_TERRAIN_MIN_Y; tileY <= ISO_TERRAIN_MAX_Y; tileY++) {
+      for (let tileX = ISO_TERRAIN_MIN_X; tileX <= ISO_TERRAIN_MAX_X; tileX++) {
+        const outsideCourtyard =
+          tileX < 0 ||
+          tileX >= ISO_MAP_COLUMNS ||
+          tileY < 0 ||
+          tileY >= ISO_MAP_ROWS;
+        if (!outsideCourtyard) continue;
+
+        const variation = Math.abs(
+          Math.sin(tileX * 269.5 + tileY * 183.3) * 15631.743
+        ) % 1;
+        if (variation > 0.035) continue;
+
+        const position = isoTileToWorld(tileX, tileY);
+        const flower = this.add.image(
+          position.x,
+          position.y,
+          floweringBushKey
+        )
+          .setOrigin(0.5, 1)
+          .setScale(0.24 + variation * 0.5);
+        this.addLayerObject('decorations', flower, position.y + 1);
+      }
+    }
   }
 
   drawStructureLayer() {
@@ -850,6 +1077,15 @@ class IsometricCourtyardScene extends Phaser.Scene {
       if (asset.id === 'castle-grand-staircase') {
         this.staircaseSprite = sprite;
       }
+      if (asset.id.includes('tower')) {
+        this.addSoftShadow(
+          sprite.x,
+          sprite.y - 2,
+          Math.min(sprite.displayWidth * 0.72, 96),
+          sprite.y - 0.5,
+          0.13
+        );
+      }
       this.addLayerObject(
         'structures',
         sprite,
@@ -859,39 +1095,131 @@ class IsometricCourtyardScene extends Phaser.Scene {
   }
 
   drawStairwayDebug() {
-    const lower = getStairwayPoint(0, this.castleDoorAnchor);
-    const upper = getStairwayPoint(1, this.castleDoorAnchor);
-    const pathX = upper.x - lower.x;
-    const pathY = upper.y - lower.y;
-    const length = Math.hypot(pathX, pathY);
-    const normalX = -pathY / length;
-    const normalY = pathX / length;
     const graphics = this.add.graphics();
+    const corridorSides = [[], []];
+    const centerline = [];
+    const pathSamples = 48;
+
+    for (let index = 0; index <= pathSamples; index++) {
+      const progress = ISO_STAIRWAY_APPROACH_PROGRESS +
+        (ISO_STAIRWAY_EXIT_PROGRESS - ISO_STAIRWAY_APPROACH_PROGRESS) *
+          index / pathSamples;
+      const point = getStairwayPoint(progress, this.staircaseSprite);
+      const { direction } = getStairwayProgress(
+        point.x,
+        point.y,
+        this.staircaseSprite
+      );
+      const normalX = -direction.y;
+      const normalY = direction.x;
+      centerline.push(point);
+      corridorSides[0].push({
+        x: point.x + normalX * ISO_STAIRWAY_HALF_WIDTH,
+        y: point.y + normalY * ISO_STAIRWAY_HALF_WIDTH
+      });
+      corridorSides[1].push({
+        x: point.x - normalX * ISO_STAIRWAY_HALF_WIDTH,
+        y: point.y - normalY * ISO_STAIRWAY_HALF_WIDTH
+      });
+    }
 
     graphics.fillStyle(0x50ffbd, 0.16);
     graphics.fillPoints([
-      { x: lower.x + normalX * ISO_STAIRWAY_HALF_WIDTH, y: lower.y + normalY * ISO_STAIRWAY_HALF_WIDTH },
-      { x: upper.x + normalX * ISO_STAIRWAY_HALF_WIDTH, y: upper.y + normalY * ISO_STAIRWAY_HALF_WIDTH },
-      { x: upper.x - normalX * ISO_STAIRWAY_HALF_WIDTH, y: upper.y - normalY * ISO_STAIRWAY_HALF_WIDTH },
-      { x: lower.x - normalX * ISO_STAIRWAY_HALF_WIDTH, y: lower.y - normalY * ISO_STAIRWAY_HALF_WIDTH }
+      ...corridorSides[0],
+      ...corridorSides[1].reverse()
     ], true);
     graphics.lineStyle(2, 0x50ffbd, 0.9);
-    graphics.lineBetween(
-      lower.x + normalX * ISO_STAIRWAY_HALF_WIDTH,
-      lower.y + normalY * ISO_STAIRWAY_HALF_WIDTH,
-      upper.x + normalX * ISO_STAIRWAY_HALF_WIDTH,
-      upper.y + normalY * ISO_STAIRWAY_HALF_WIDTH
-    );
-    graphics.lineBetween(
-      lower.x - normalX * ISO_STAIRWAY_HALF_WIDTH,
-      lower.y - normalY * ISO_STAIRWAY_HALF_WIDTH,
-      upper.x - normalX * ISO_STAIRWAY_HALF_WIDTH,
-      upper.y - normalY * ISO_STAIRWAY_HALF_WIDTH
-    );
+    for (const side of corridorSides) {
+      for (let index = 1; index < side.length; index++) {
+        graphics.lineBetween(
+          side[index - 1].x,
+          side[index - 1].y,
+          side[index].x,
+          side[index].y
+        );
+      }
+    }
+    graphics.lineStyle(1, 0x50ffbd, 0.7);
+    for (let index = 1; index < centerline.length; index++) {
+      graphics.lineBetween(
+        centerline[index - 1].x,
+        centerline[index - 1].y,
+        centerline[index].x,
+        centerline[index].y
+      );
+    }
     graphics.lineStyle(1, 0xffda74, 0.95);
-    graphics.strokeCircle(this.castleEntrance.x, this.castleEntrance.y, this.castleEntrance.radius);
+    graphics.strokeCircle(
+      this.castleEntrance.x,
+      this.castleEntrance.y,
+      this.castleEntrance.radius
+    );
     graphics.setDepth(10001);
     this.collisionDebugObjects.push(graphics);
+  }
+
+  drawStairwayActorDebug() {
+    this.stairwayActorDebug = this.add.graphics().setDepth(10002);
+    this.stairwayDebugReadout = this.add.text(16, 76, '', {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      color: '#b9f5ff',
+      backgroundColor: '#202536',
+      padding: { x: 6, y: 4 }
+    }).setScrollFactor(0).setDepth(10002);
+    this.updateStairwayActorDebug();
+  }
+
+  updateStairwayActorDebug() {
+    if (!this.stairwayActorDebug || !this.knight.body) return;
+
+    const { x, y, width, height } = this.knight.body;
+    const logicalX = this.knight.body.center.x;
+    const logicalY = this.knight.body.bottom;
+    const visualFootY = this.knight.y +
+      this.knight.displayHeight * this.knight.originY;
+    this.stairwayActorDebug.clear();
+    this.stairwayActorDebug.lineStyle(2, 0x54e8ff, 1);
+    this.stairwayActorDebug.strokeRect(x, y, width, height);
+    this.stairwayActorDebug.lineStyle(1, 0xffda74, 0.9);
+    this.stairwayActorDebug.lineBetween(
+      this.knight.x,
+      visualFootY,
+      logicalX,
+      logicalY
+    );
+    this.stairwayActorDebug.fillStyle(0x54e8ff, 0.85);
+    this.stairwayActorDebug.fillCircle(logicalX, logicalY, 3);
+    this.stairwayActorDebug.fillStyle(0xffda74, 0.85);
+    this.stairwayActorDebug.fillCircle(this.knight.x, visualFootY, 3);
+
+    const stairwayPosition = getStairwayProgress(
+      logicalX,
+      logicalY,
+      this.staircaseSprite
+    );
+    this.stairwayDebugReadout.setText([
+      `Region: ${this.stairwayRegion}`,
+      `Progress: ${stairwayPosition.progress.toFixed(2)}`,
+      `Logical: ${logicalX.toFixed(1)}, ${logicalY.toFixed(1)}`,
+      `Visual: ${this.knight.x.toFixed(1)}, ${visualFootY.toFixed(1)}`
+    ]);
+  }
+
+  logMovementRejected(actor, blocker) {
+    if (!this.debugStairs ||
+        (!this.movementIntent.x && !this.movementIntent.y)) return;
+
+    const reason = blocker.getData('blockReason') || 'solid obstacle';
+    const now = this.time.now;
+    if (now - (this.lastMovementBlockLog.get(reason) ?? -Infinity) < 500) return;
+
+    this.lastMovementBlockLog.set(reason, now);
+    console.debug(`[stairs] Movement blocked by ${reason}`, {
+      position: { x: actor.x, y: actor.y },
+      collision: { x: actor.body.x, y: actor.body.y },
+      requestedVelocity: this.movementIntent
+    });
   }
 
   drawFountain(tile) {
@@ -905,6 +1233,23 @@ class IsometricCourtyardScene extends Phaser.Scene {
     );
     this.fountain = fountain;
     fountain.setDepth(fountain.y);
+
+    const reflection = this.add.graphics();
+    reflection.fillStyle(0xd8f4ff, 0.2);
+    reflection.fillEllipse(
+      fountain.x - fountain.displayWidth * 0.22,
+      fountain.y - fountain.displayHeight * 0.16,
+      fountain.displayWidth * 0.11,
+      fountain.displayHeight * 0.025
+    );
+    reflection.fillStyle(0xffffff, 0.14);
+    reflection.fillEllipse(
+      fountain.x + fountain.displayWidth * 0.2,
+      fountain.y - fountain.displayHeight * 0.13,
+      fountain.displayWidth * 0.075,
+      fountain.displayHeight * 0.018
+    );
+    reflection.setDepth(fountain.depth + 0.2);
   }
 
   addManifestSprites(layer, assets, fixedDepth) {
@@ -920,6 +1265,15 @@ class IsometricCourtyardScene extends Phaser.Scene {
       this.manifestSprites.set(asset.id ?? asset.key, sprite);
       if (fixedDepth !== undefined) sprite.setDepth(fixedDepth);
       else sprite.setDepth(position.y + (asset.depthOffset ?? 0));
+      if (layer === 'decorations' && asset.collision) {
+        this.addSoftShadow(
+          position.x,
+          position.y - 2,
+          Math.min(sprite.displayWidth * 0.68, 118),
+          position.y - 0.5,
+          0.11
+        );
+      }
     }
   }
 
@@ -955,7 +1309,7 @@ class IsometricCourtyardScene extends Phaser.Scene {
         const y = top + (collision.y + collision.height / 2) * scaleY;
         const width = collision.width * scaleX;
         const height = collision.height * scaleY;
-        this.addStaticCollision(x, y, width, height);
+        this.addStaticCollision(x, y, width, height, asset.id ?? asset.key);
       }
     }
 
@@ -965,45 +1319,64 @@ class IsometricCourtyardScene extends Phaser.Scene {
         doorX + side * 350,
         doorY + 1,
         510,
-        20
+        20,
+        'castle wall'
       );
       this.addStaticCollision(
         doorX + side * 84,
         doorY + 38,
         12,
-        52
+        52,
+        'doorway side wall'
       );
       this.addStaticCollision(
         doorX + side * 410,
         doorY - 10,
         74,
-        28
+        28,
+        'castle wall return'
       );
       this.addStaticCollision(
         doorX + side * 610,
         doorY + 3,
         110,
-        40
+        40,
+        'castle tower'
       );
     }
 
-    const lower = getStairwayPoint(0, this.castleDoorAnchor);
-    const upper = getStairwayPoint(1, this.castleDoorAnchor);
+    const lower = getStairwayPoint(
+      ISO_STAIRWAY_APPROACH_PROGRESS,
+      this.staircaseSprite
+    );
+    const upper = getStairwayPoint(
+      ISO_STAIRWAY_EXIT_PROGRESS,
+      this.staircaseSprite
+    );
     const pathX = upper.x - lower.x;
     const pathY = upper.y - lower.y;
     const length = Math.hypot(pathX, pathY);
-    const normalX = -pathY / length;
-    const normalY = pathX / length;
+    const railSegments = Math.ceil(length / 8);
 
-    for (let step = -1; step <= 13; step++) {
-      const progress = step / 12;
-      const point = getStairwayPoint(progress, this.castleDoorAnchor);
+    for (let step = 0; step <= railSegments; step++) {
+      const progress = ISO_STAIRWAY_APPROACH_PROGRESS +
+        (ISO_STAIRWAY_EXIT_PROGRESS - ISO_STAIRWAY_APPROACH_PROGRESS) *
+          step / railSegments;
+      const point = getStairwayPoint(progress, this.staircaseSprite);
+      const { direction } = getStairwayProgress(
+        point.x,
+        point.y,
+        this.staircaseSprite
+      );
+      const normalX = -direction.y;
+      const normalY = direction.x;
       for (const side of [-1, 1]) {
         this.addStaticCollision(
-          point.x + side * normalX * (ISO_STAIRWAY_HALF_WIDTH + 7),
-          point.y + side * normalY * (ISO_STAIRWAY_HALF_WIDTH + 7),
-          8,
-          10
+          point.x + side * normalX * ISO_STAIRWAY_RAIL_OFFSET,
+          point.y + side * normalY * ISO_STAIRWAY_RAIL_OFFSET,
+          12,
+          12,
+          'staircase railing'
         );
       }
     }
@@ -1021,6 +1394,7 @@ class IsometricCourtyardScene extends Phaser.Scene {
     const height = collision.height * scaleY;
 
     this.fountainBody = this.add.zone(x, y, width, height);
+    this.fountainBody.setData('blockReason', 'fountain');
     this.physics.add.existing(this.fountainBody, true);
     this.fountainCollisionDebug = this.addCollisionDebug(this.fountainBody);
   }
@@ -1032,9 +1406,13 @@ class IsometricCourtyardScene extends Phaser.Scene {
   update() {
     if (this.transitioning || this.dialogueActive) return;
 
+    const actorGroundPoint = {
+      x: this.knight.body.center.x,
+      y: this.knight.body.bottom
+    };
     const entranceDistance = Phaser.Math.Distance.Between(
-      this.knight.x,
-      this.knight.y,
+      actorGroundPoint.x,
+      actorGroundPoint.y,
       this.castleEntrance.x,
       this.castleEntrance.y
     );
@@ -1049,23 +1427,116 @@ class IsometricCourtyardScene extends Phaser.Scene {
         returnScene: 'IsometricCourtyard',
         returnSpawn: {
           x: this.castleEntrance.x,
-          y: this.castleEntrance.y + 10
+          y: getStairwayPoint(0.92, this.staircaseSprite).y -
+            (this.knight.body.bottom - this.knight.y)
         }
       });
       return;
     }
 
     updateKnightMovement(this);
-    const stairwayPosition = getStairwayProgress(
-      this.knight.x,
-      this.knight.y,
-      this.castleDoorAnchor
+    this.movementIntent = {
+      x: this.knight.body.velocity.x,
+      y: this.knight.body.velocity.y
+    };
+    actorGroundPoint.x = this.knight.body.center.x;
+    actorGroundPoint.y = this.knight.body.bottom;
+    let stairwayPosition = getStairwayProgress(
+      actorGroundPoint.x,
+      actorGroundPoint.y,
+      this.staircaseSprite
     );
-    const onStairway =
+
+    let inStairwayRegion =
+      stairwayPosition.progress >= ISO_STAIRWAY_APPROACH_PROGRESS &&
+      stairwayPosition.progress <= ISO_STAIRWAY_EXIT_PROGRESS &&
       stairwayPosition.distance <= ISO_STAIRWAY_HALF_WIDTH + 12;
-    const depth = onStairway && this.staircaseSprite
+    const staircaseLeft = this.staircaseSprite.x -
+      this.staircaseSprite.displayWidth * this.staircaseSprite.originX;
+    const staircaseTop = this.staircaseSprite.y -
+      this.staircaseSprite.displayHeight * this.staircaseSprite.originY;
+    const insideStaircaseArtwork =
+      actorGroundPoint.x >= staircaseLeft &&
+      actorGroundPoint.x <= staircaseLeft + this.staircaseSprite.displayWidth &&
+      actorGroundPoint.y >= staircaseTop &&
+      actorGroundPoint.y <= this.staircaseSprite.y;
+
+    if (insideStaircaseArtwork && !inStairwayRegion &&
+        this.knight.depth < this.staircaseSprite.depth) {
+      const recoveryPoint = getStairwayPoint(
+        stairwayPosition.progress,
+        this.staircaseSprite
+      );
+      const bodyGroundOffset = this.knight.body.bottom - this.knight.y;
+      this.knight.setPosition(
+        recoveryPoint.x,
+        recoveryPoint.y - bodyGroundOffset
+      );
+      this.knight.body.reset(this.knight.x, this.knight.y);
+      this.knight.setVelocity(0, 0);
+      actorGroundPoint.x = this.knight.body.center.x;
+      actorGroundPoint.y = this.knight.body.bottom;
+      stairwayPosition = getStairwayProgress(
+        actorGroundPoint.x,
+        actorGroundPoint.y,
+        this.staircaseSprite
+      );
+      inStairwayRegion = true;
+      console.warn('[stairs] Recovered Omar from the invalid under-stair area', {
+        logical: { x: actorGroundPoint.x, y: actorGroundPoint.y },
+        safeProgress: stairwayPosition.progress
+      });
+    }
+
+    let region = 'courtyard';
+    if (inStairwayRegion) {
+      if (stairwayPosition.progress < 0) region = 'lower-approach';
+      else if (stairwayPosition.progress >= 1) region = 'upper-landing';
+      else region = 'stair-run';
+    }
+
+    if (region !== this.stairwayRegion) {
+      this.stairwayRegion = region;
+      if (this.debugStairs) {
+        console.debug(`[stairs] Omar entered ${region}`, {
+          progress: stairwayPosition.progress,
+          distanceFromPath: stairwayPosition.distance
+        });
+      }
+    }
+
+    if (region === 'stair-run') {
+      const { direction } = stairwayPosition;
+      const requestedAlongPath =
+        this.movementIntent.x * direction.x +
+        this.movementIntent.y * direction.y;
+      const alongPath = Math.abs(requestedAlongPath) < 12
+        ? 0
+        : requestedAlongPath;
+      this.knight.body.setVelocity(
+        direction.x * alongPath,
+        direction.y * alongPath
+      );
+      if (this.debugStairs &&
+          Math.abs(requestedAlongPath) < 12 &&
+          (this.movementIntent.x || this.movementIntent.y)) {
+        this.logMovementRejected(this.knight, {
+          getData: () => 'stairway path limits movement to the steps'
+        });
+      }
+      if (alongPath === 0) this.knight.anims.stop();
+      else {
+        const facing = Math.abs(direction.x) > Math.abs(direction.y)
+          ? (direction.x * alongPath < 0 ? 'left' : 'right')
+          : (direction.y * alongPath < 0 ? 'up' : 'down');
+        this.knight.anims.play(`walk-${facing}`, true);
+      }
+    }
+
+    const depth = inStairwayRegion && this.staircaseSprite
       ? Math.max(this.knight.body.bottom, this.staircaseSprite.depth + 1)
       : this.knight.body.bottom;
     this.knight.setDepth(depth);
+    this.updateStairwayActorDebug();
   }
 }
